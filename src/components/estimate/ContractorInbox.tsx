@@ -32,7 +32,7 @@ import {
   PrivateRoomMediaError,
   revokePrivateRoomMediaObjectUrl,
 } from "@/lib/private-room-media";
-import { superdevClient } from "@/lib/superdev/client";
+import { supabase } from "@/integrations/supabase/client";
 import type { EstimateLead, UsageDiagnosticReply } from "@/types/estimate";
 import { PageFooter } from "@/components/estimate/JourneyNav";
 
@@ -175,15 +175,15 @@ export function ContractorInbox() {
     let active = true;
     const verifyAdmin = async () => {
       try {
-        const authenticated = await superdevClient.isAuthenticated();
+        const { data: { session } } = await supabase.auth.getSession();
         if (!active) return;
-        if (!authenticated) {
+        if (!session) {
           setAccess("signed-out");
           return;
         }
         const currentUser = await User.me();
         if (!active) return;
-        if (currentUser.role !== "administrator") {
+        if (!currentUser.isAdmin) {
           setAccess("not-admin");
           return;
         }
@@ -283,7 +283,7 @@ export function ContractorInbox() {
   };
 
   const logout = async () => {
-    await superdevClient.auth.logout(false);
+    await supabase.auth.signOut();
     navigate({ to: "/login" });
   };
 
