@@ -1511,6 +1511,39 @@ export function HomeownerWizard() {
     setWallAreaEditError("");
   };
 
+  /** Builds the printable quote section for the current room. */
+  const buildQuoteRoom = (label: string): QuoteDocRoom | null => {
+    if (!dimensions) return null;
+    const size = typeof dimensions.lengthFt === "number" && typeof dimensions.widthFt === "number"
+      ? `${formatDimensionValue(dimensions.lengthFt)} × ${formatDimensionValue(dimensions.widthFt)} ft${typeof dimensions.ceilingHeightFt === "number" ? `, ${formatDimensionValue(dimensions.ceilingHeightFt)} ft ceiling` : ""}`
+      : "Size entered by homeowner";
+    return {
+      label,
+      sizeLabel: size,
+      wallArea: dimensions.wallArea,
+      doors: assessment.visibleDoorCount ?? 0,
+      windows: assessment.visibleWindowCount ?? 0,
+      lines: includedItems.map((item) => ({ label: item.label, detail: item.detail, low: item.low, high: item.high })),
+      taxLow: totals.taxLow,
+      taxHigh: totals.taxHigh,
+      low: totals.low,
+      high: totals.high,
+    };
+  };
+
+  const getQuoteDocument = () => {
+    const current = buildQuoteRoom(roomTypeName(assessment.roomType));
+    if (!current) return null;
+    return buildQuoteDocument({
+      businessName: "Demo Painting Co.",
+      createdAt: new Date(),
+      colorName: color.name,
+      colorHex: color.hex,
+      budgetLabel: budgetAmount === null ? "Show market price" : budgetIsCustom ? money(budgetAmount) : budgetLabel,
+      rooms: [current],
+    });
+  };
+
   const estimateEditorState: EstimateEditorState = {
     mode,
     captureMode,
@@ -1529,12 +1562,30 @@ export function HomeownerWizard() {
     transcript,
     observations,
     assessment,
-    onAdjustCount: (key: "visibleDoorCount" | "visibleWindowCount", delta: number) => setAssessment((prev) => {
-      const next = { ...prev, [key]: Math.max(0, Math.min(20, (prev[key] ?? 0) + delta)) };
-      next.openingDeductionSqFt = (next.visibleDoorCount ?? 0) * 20 + (next.visibleWindowCount ?? 0) * 15 || null;
-      if (next.openingDeductionSqFt !== null) next.scaleReference = "standard_door";
-      return next;
-    }),
+    onAdjustCount: (key: "visibleDoorCount" | "visibleWindowCount", delta: number) => {
+      // Count changes must flow into the net area, so drop any typed-over wall area.
+      if (estimateSource === "doorway_scale") {
+        setManualWallAreaOverride(null);
+        setWallAreaEditing(false);
+      }
+      setAssessment((prev) => {
+        const next = { ...prev, [key]: Math.max(0, Math.min(20, (prev[key] ?? 0) + delta)) };
+        next.openingDeductionSqFt = computeOpeningDeduction(next.visibleDoorCount, next.visibleWindowCount) || null;
+        if (next.openingDeductionSqFt !== null) next.scaleReference = "standard_door";
+        return next;
+      });
+    },
+    updateRoomSize: (key: "lengthFt" | "widthFt" | "ceilingHeightFt", value: string) => {
+      setManualWallAreaOverride(null);
+      setWallAreaEditing(false);
+      updateMeasurement(key, value);
+    },
+    quoteActions: mode === "homeowner" ? <QuoteShareButtons getDocument={getQuoteDocument} tone="dark" /> : null,
+    frameWallMasks,
+    openingChecks: mode === "homeowner" ? {
+      doors: crossCheckOpeningCount(assessment.visibleDoorCount, samOpeningCounts.doors),
+      windows: crossCheckOpeningCount(assessment.visibleWindowCount, samOpeningCounts.windows),
+    } : undefined,
     estimateSource,
     manualWallAreaOverride,
     wallAreaEditing,
@@ -1610,6 +1661,7 @@ export function HomeownerWizard() {
     mediaShareConsent,
     formError,
     submitting,
+    quoteActions: mode === "homeowner" ? <QuoteShareButtons getDocument={getQuoteDocument} /> : null,
   };
 
   const contactSubmissionHandlers: ContactSubmissionHandlers = {
