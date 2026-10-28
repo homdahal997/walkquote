@@ -296,5 +296,5 @@ export async function runUsageDiagnostic(address: string | null) {
     ok = false;
   }
   const connectionFingerprint = address ? (await sha256Hex(`walkquote-diagnostic:${address}`)).slice(0, 24) : null;
-  return { ok, processMarker: PROCESS_MARKER, connectionFingerprint };
+  return { ok, processMarker: getProcessMarker(), connectionFingerprint };
 }
