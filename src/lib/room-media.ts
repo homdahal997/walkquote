@@ -501,6 +501,8 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
 
 export async function audioBlobToWavBase64(blob: Blob): Promise<string> {
   if (blob.size === 0 || blob.size > 3_000_000) throw new Error("audio-size-invalid");
+  // Notes recorded as raw PCM are already WAV; no browser decoding needed (avoids iOS decode failures).
+  if (blob.type === "audio/wav") return blobToBase64(blob);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const AudioCtor: typeof AudioContext = window.AudioContext ?? (window as any).webkitAudioContext;
   if (!AudioCtor) throw new Error("audio-decoder-unavailable");
