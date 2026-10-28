@@ -8,6 +8,9 @@ import { isValidPhoneNumber } from "react-phone-number-input";
 import { contacts } from "@/integrations/core";
 import { RoomEstimate } from "@/entities";
 import type { RoomEstimateMediaManifest, RoomEstimateRecord } from "@/entities";
+import { QuoteShareButtons } from "@/components/estimate/QuoteShareButtons";
+import { buildQuoteDocument, type QuoteDocRoom } from "@/lib/quote-document";
+import { baseboardLengthFt, crossCheckOpeningCount, roomTypeName, openingDeductionSqFt as computeOpeningDeduction } from "@/lib/room-sizes";
 import { analyzeRoom } from "@/functions";
 import type { AnalyzeRoomRequest, AnalysisSourceId } from "@/functions";
 import {
