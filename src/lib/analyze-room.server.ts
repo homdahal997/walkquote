@@ -12,11 +12,12 @@ import {
   type Stage,
 } from "./analyze-room.shared.server";
 
-const GATEWAY = "https://ai.gateway.lovable.dev/v1";
-const OBSERVE_MODEL = "openai/gpt-6-astra";
-// Gemini returns reliable 0-1000 spatial coordinates, which the wall/trim/opening overlays need.
-const SEGMENT_MODEL = "google/gemini-3-flash-preview";
-const TRANSCRIBE_MODEL = "openai/gpt-transcribe";
+// Meta Model API (hackathon models): Muse Spark for room review, SAM 3.1 for surface masks,
+// Muse Voice Transcribe for spoken notes.
+const META_API = "https://api.meta.ai/v1";
+const OBSERVE_MODEL = "muse-spark-1.3";
+const SEGMENT_MODEL = "sam-3.1";
+const TRANSCRIBE_MODEL = "muse-voice-transcribe-1.0";
 const VISITOR_DAILY_LIMIT = 3;
 const SITE_DAILY_LIMIT = 25;
 const DAILY_MS = 24 * 60 * 60 * 1000;
@@ -41,26 +42,25 @@ class GatewayError extends Error {
 }
 
 function apiKey() {
-  const key = process.env["LOVABLE_API_KEY"];
+  const key = process.env["META_MODEL_API_KEY"];
   if (!key) throw new GatewayError(503, "The room analysis service is not configured.");
   return key;
 }
 
-function gatewayHeaders(sdk = "fetch") {
-  return {
-    Authorization: `Bearer ${apiKey()}`,
-    "Lovable-API-Key": apiKey(),
-    "X-Lovable-AIG-SDK": sdk,
-    "Content-Type": "application/json",
-  };
+function metaHeaders(extra: Record<string, string> = {}) {
+  return { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json", ...extra };
 }
 
 async function failFromResponse(response: Response): Promise<never> {
   const body = await response.text().catch(() => "");
-  console.error("analyze-room gateway error", response.status, body.slice(0, 500));
+  console.error("analyze-room meta api error", response.status, body.slice(0, 500));
   if (response.status === 429) throw new GatewayError(429, "The analysis service is busy right now. Wait a minute and retry.");
-  if (response.status === 402) throw new GatewayError(402, "Room analysis is paused because AI credits ran out. Please try again later.");
+  if (response.status === 402) throw new GatewayError(402, "Room analysis is paused because Meta API credits ran out. Please try again later.");
   throw new GatewayError(response.status, "Room analysis did not finish. Please retry.");
+}
+
+function withTimeout(ms = 55_000) {
+  return AbortSignal.timeout(ms);
 }
 
 async function* sseData(response: Response): AsyncGenerator<Json> {
@@ -88,132 +88,94 @@ async function* sseData(response: Response): AsyncGenerator<Json> {
   }
 }
 
-/** Streams a Responses call and returns the final text. */
-async function responsesText(content: Json[]) {
-  const response = await fetch(`${GATEWAY}/responses`, {
-    method: "POST",
-    headers: gatewayHeaders(),
-    body: JSON.stringify({
-      model: OBSERVE_MODEL,
-      stream: true,
-      store: false,
-      reasoning: { effort: "low" },
-      input: [{ role: "user", content }],
-    }),
-  });
-  if (!response.ok) await failFromResponse(response);
-  let text = "";
-  for await (const event of sseData(response)) {
-    if (event["type"] === "response.output_text.delta" && typeof event["delta"] === "string") text += event["delta"];
-    if (event["type"] === "response.failed" || event["type"] === "error") throw new GatewayError(502, "Room analysis did not finish. Please retry.");
-  }
-  return text;
-}
-
-/** Streams a chat completion and returns the final text. */
-async function chatText(messages: Json[]) {
-  const response = await fetch(`${GATEWAY}/chat/completions`, {
-    method: "POST",
-    headers: gatewayHeaders(),
-    body: JSON.stringify({ model: SEGMENT_MODEL, stream: true, messages }),
-  });
-  if (!response.ok) await failFromResponse(response);
-  let text = "";
-  for await (const event of sseData(response)) {
-    const choices = event["choices"] as Array<{ delta?: { content?: string } }> | undefined;
-    const delta = choices?.[0]?.delta?.content;
-    if (typeof delta === "string") text += delta;
-  }
-  return text;
+function outputText(payload: unknown) {
+  const output = (payload as { output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }> })?.output;
+  if (!Array.isArray(output)) return "";
+  return output
+    .filter((item) => item.type === "message")
+    .flatMap((item) => item.content ?? [])
+    .filter((part) => part.type === "output_text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("");
 }
 
 async function transcribe(bytes: Uint8Array) {
   const form = new FormData();
-  form.append("model", TRANSCRIBE_MODEL);
-  form.append("file", new File([bytes as unknown as BlobPart], "room-note.wav", { type: "audio/wav" }));
-  form.append("response_format", "json");
-  const response = await fetch(`${GATEWAY}/audio/transcriptions`, {
+  form.set(
+    "request",
+    new Blob([JSON.stringify({ mode: "PUSH_TO_TALK", model: TRANSCRIBE_MODEL, audioEncoding: "WAV" })], { type: "application/json" }),
+    "request.json",
+  );
+  form.set("audio", new Blob([bytes as unknown as BlobPart], { type: "audio/wav" }), "room-note.wav");
+  const response = await fetch(`${META_API}/asr/transcribe?sessionId=${crypto.randomUUID()}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey()}`, "Lovable-API-Key": apiKey(), "X-Lovable-AIG-SDK": "fetch" },
+    headers: { Authorization: `Bearer ${apiKey()}`, Accept: "application/json" },
     body: form,
+    signal: withTimeout(),
   });
   if (!response.ok) await failFromResponse(response);
-  const result = (await response.json()) as { text?: unknown; transcript?: unknown };
-  const text = typeof result.text === "string" ? result.text : typeof result.transcript === "string" ? result.transcript : null;
-  if (text === null) throw new GatewayError(502, "Room analysis did not finish. Please retry.");
-  return redactPrivateStrings(text);
+  const result = (await response.json()) as { transcript?: unknown };
+  if (typeof result.transcript !== "string") throw new GatewayError(502, "Room analysis did not finish. Please retry.");
+  return redactPrivateStrings(result.transcript);
 }
 
 async function observe(imageUrls: string[], transcript: string, sourceId: AnalysisSourceId) {
   const prompt = buildObservePrompt(transcript, sourceId);
-  const text = await responsesText([
-    { type: "input_text", text: prompt },
-    ...imageUrls.map((url) => ({ type: "input_image", image_url: url })),
-  ]);
+  const response = await fetch(`${META_API}/responses`, {
+    method: "POST",
+    headers: metaHeaders(),
+    body: JSON.stringify({
+      model: OBSERVE_MODEL,
+      input: [
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: prompt }, ...imageUrls.map((url) => ({ type: "input_image", image_url: url }))],
+        },
+      ],
+    }),
+    signal: withTimeout(),
+  });
+  if (!response.ok) await failFromResponse(response);
+  const text = outputText(await response.json());
   if (!text || text.length > 3000) throw new GatewayError(502, "Room analysis did not finish. Please retry.");
   return parseObservationJson(text);
 }
 
-function jpegSize(dataUrl: string): { width: number; height: number } | null {
-  const comma = dataUrl.indexOf(",");
-  if (comma < 0) return null;
-  const binary = atob(dataUrl.slice(comma + 1));
-  let offset = 2;
-  while (offset + 9 < binary.length) {
-    if (binary.charCodeAt(offset) !== 0xff) return null;
-    const marker = binary.charCodeAt(offset + 1);
-    const length = (binary.charCodeAt(offset + 2) << 8) | binary.charCodeAt(offset + 3);
-    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
-      const height = (binary.charCodeAt(offset + 5) << 8) | binary.charCodeAt(offset + 6);
-      const width = (binary.charCodeAt(offset + 7) << 8) | binary.charCodeAt(offset + 8);
-      return width > 0 && height > 0 ? { width, height } : null;
-    }
-    offset += 2 + length;
-  }
-  return null;
-}
-
-async function imageSize(url: string) {
-  if (url.startsWith("data:image/jpeg")) return jpegSize(url) ?? { width: 1200, height: 800 };
-  return { width: 1200, height: 800 };
+/** Runs one SAM 3.1 concept prompt and returns its raw segmentation line (empty when nothing matched). */
+async function samConcept(imageUrl: string, concept: string) {
+  const response = await fetch(`${META_API}/responses`, {
+    method: "POST",
+    headers: metaHeaders(),
+    body: JSON.stringify({
+      model: SEGMENT_MODEL,
+      metadata: { mask_encoding: "one_bit" },
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: concept }, { type: "input_image", image_url: imageUrl }] },
+      ],
+    }),
+    signal: withTimeout(),
+  });
+  if (!response.ok) await failFromResponse(response);
+  return outputText(await response.json()).trim();
 }
 
 /**
- * Asks the vision model for polygon outlines of one surface type and returns a compact JSON
- * mask description that the browser rasterizes (see decodeOptionalMask).
+ * Segments one surface type with SAM 3.1. Several concepts are merged into one frame line
+ * with re-numbered object ids so the browser decodes it with @meta-sam/parser.
  */
-async function segment(imageUrl: string, surfacePrompt: string) {
-  const size = await imageSize(imageUrl);
-  const text = await chatText([
-    {
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: `${surfacePrompt}\nReturn only JSON: {"polygons": [[[x, y], ...], ...]} with up to 12 polygons outlining the requested surfaces. Coordinates are integers normalized 0-1000 (x across the image width, y down the image height). Each polygon needs 3 to 40 points. Return {"polygons": []} if none are visible.`,
-        },
-        { type: "image_url", image_url: { url: imageUrl } },
-      ],
-    },
-  ]);
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("segmentation-invalid");
-  const parsed = JSON.parse(cleaned.slice(start, end + 1)) as { polygons?: unknown };
-  if (!Array.isArray(parsed.polygons)) throw new Error("segmentation-invalid");
-  const polygons = parsed.polygons
-    .filter((poly): poly is unknown[] => Array.isArray(poly))
-    .map((poly) =>
-      poly
-        .filter((p): p is [number, number] => Array.isArray(p) && p.length >= 2 && typeof p[0] === "number" && typeof p[1] === "number")
-        .slice(0, 40)
-        .map(([x, y]) => [Math.round(Math.min(1000, Math.max(0, x))), Math.round(Math.min(1000, Math.max(0, y)))]),
-    )
-    .filter((poly) => poly.length >= 3)
-    .slice(0, 12);
-  if (polygons.length === 0) throw new Error("segmentation-empty");
-  const out = JSON.stringify({ v: "poly", w: size.width, h: size.height, polygons });
+async function segment(imageUrl: string, concepts: readonly string[]) {
+  const lines = await Promise.all(concepts.map((concept) => samConcept(imageUrl, concept)));
+  const records: string[] = [];
+  for (const line of lines) {
+    const body = line.replace(/^<0f>/, "");
+    if (!body) continue;
+    for (const match of body.matchAll(/(?:^|,)\d+(<\|box;[^|]+\|><\|mask;[^|]+\|>)/g)) {
+      if (records.length < 16) records.push(`${records.length}${match[1]}`);
+    }
+  }
+  if (records.length === 0) throw new Error("segmentation-empty");
+  const out = `<0f>${records.join(",")}`;
   if (out.length > MAX_MASK_TEXT_CHARS) throw new Error("segmentation-too-large");
   return out;
 }
