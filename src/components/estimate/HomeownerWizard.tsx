@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { toast } from "sonner";
 import { Link, useLocation } from "@tanstack/react-router";
 import { AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowRight, Camera, ShieldCheck, Sparkles, Video } from "lucide-react";
@@ -781,12 +782,23 @@ export function HomeownerWizard() {
           activeStep = 0;
           setCurrentAnalysisStep(0);
           setAnalysisStep(0, "working");
-          const wavBase64 = await audioBlobToWavBase64(audioToTranscribe);
-          const transcription = await requestAnalysisStage({ stage: "transcribe", sourceId, audioBase64: wavBase64 }, attemptId);
-          const spoken = cleanRoomNote(transcription.transcript ?? "");
-          noteForAnalysis = spoken || noteForAnalysis;
-          setTranscript(noteForAnalysis);
-          setAnalysisStep(0, spoken ? "done" : noteForAnalysis ? "done" : "skipped");
+          try {
+            const wavBase64 = await audioBlobToWavBase64(audioToTranscribe);
+            const transcription = await requestAnalysisStage({ stage: "transcribe", sourceId, audioBase64: wavBase64 }, attemptId);
+            const spoken = cleanRoomNote(transcription.transcript ?? "");
+            noteForAnalysis = spoken || noteForAnalysis;
+            setTranscript(noteForAnalysis);
+            setAnalysisStep(0, spoken ? "done" : noteForAnalysis ? "done" : "skipped");
+          } catch (voiceError) {
+            // Daily-limit and attempt errors must still stop the run.
+            const code = voiceError instanceof AnalysisStageError ? voiceError.code : null;
+            if (code && /LIMIT|USAGE|ATTEMPT|STAGE_ALREADY/.test(code)) throw voiceError;
+            const detail = voiceError instanceof Error ? voiceError.message : String(voiceError);
+            console.warn("Voice note skipped:", detail, audioToTranscribe.type, audioToTranscribe.size);
+            setTranscript(noteForAnalysis);
+            setAnalysisStep(0, "skipped");
+            toast.warning(`Voice note could not be read (${detail}; ${audioToTranscribe.type || "unknown type"}, ${Math.round(audioToTranscribe.size / 1024)} KB). Continuing with your photos.`);
+          }
         } else {
           setTranscript(noteForAnalysis);
           setAnalysisStep(0, noteForAnalysis ? "done" : "skipped");
