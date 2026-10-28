@@ -1,0 +1,12 @@
+[
+ {"capability":"code","source":"Buildy (Vite + React Router + Superdev SDK)","outcome":"migrate","status":"in_progress","next_action":"Port pages to TanStack routes"},
+ {"capability":"schema","source":"entities/RoomEstimate.json, RoomEstimateMediaChunk.json","outcome":"migrate","status":"in_progress","next_action":"Create Cloud tables"},
+ {"capability":"records","source":"Superdev entity store","outcome":"migrate","status":"pending","next_action":"Request CSV/JSON export of RoomEstimate records"},
+ {"capability":"auth identities","source":"Superdev app auth (email/password, administrator role)","outcome":"migrate","status":"pending","next_action":"Request user export; admin role via user_roles"},
+ {"capability":"authorization","source":"anon create, admin read/update/delete","outcome":"migrate","status":"in_progress","next_action":"RLS + has_role"},
+ {"capability":"room AI analysis","source":"functions/analyze-room.ts calling api.meta.ai (muse/sam) + @meta-sam/parser","outcome":"replace with Lovable AI Gateway (provider endpoint 404, parser package not published)","status":"in_progress","next_action":"Server function"},
+ {"capability":"usage quotas","source":"Deno KV","outcome":"replace with Cloud table","status":"in_progress","next_action":""},
+ {"capability":"CRM contacts","source":"superdev integrations.core.contacts","outcome":"replace: contact stored on estimate row","status":"in_progress","next_action":""},
+ {"capability":"branding badge / buildy preview script","source":"platform metadata","outcome":"drop","status":"done","next_action":""},
+ {"capability":"verification","source":"","outcome":"","status":"pending","next_action":""}
+]
