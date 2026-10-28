@@ -37,7 +37,7 @@
  {
   "capability": "room AI analysis",
   "source": "functions/analyze-room.ts calling api.meta.ai (muse/sam) + @meta-sam/parser",
-  "outcome": "replace with Lovable AI Gateway (provider endpoint 404, parser package not published)",
+  "outcome": "migrate: restored Meta Model API with META_MODEL_API_KEY and @meta-sam/parser",
   "status": "verified",
   "next_action": "Observe + segment tested on sample room; transcription endpoint responds (not tested with real speech)"
  },
