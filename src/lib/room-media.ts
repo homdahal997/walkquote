@@ -429,6 +429,62 @@ function canvasJpeg(canvas: HTMLCanvasElement, quality: number) {
   return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
 }
 
+export interface KeyframeCandidate {
+  timestampSeconds: number;
+  brightness: number;
+  contrast: number;
+  sharpness: number;
+  signature: number[];
+}
+
+function measureFrame(video: HTMLVideoElement): Omit<KeyframeCandidate, "timestampSeconds"> {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 48;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context || !video.videoWidth) return { brightness: 0, contrast: 0, sharpness: 0, signature: [] };
+  context.drawImage(video, 0, 0, 64, 48);
+  const { data } = context.getImageData(0, 0, 64, 48);
+  const luma = new Float32Array(64 * 48);
+  for (let i = 0; i < luma.length; i += 1) luma[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+  let sum = 0;
+  for (const value of luma) sum += value;
+  const brightness = sum / luma.length;
+  let variance = 0;
+  let edges = 0;
+  for (let y = 0; y < 48; y += 1) {
+    for (let x = 0; x < 64; x += 1) {
+      const value = luma[y * 64 + x];
+      variance += (value - brightness) ** 2;
+      if (x > 0) edges += Math.abs(value - luma[y * 64 + x - 1]);
+      if (y > 0) edges += Math.abs(value - luma[(y - 1) * 64 + x]);
+    }
+  }
+  const signature = Array.from({ length: 8 }, (_, band) => {
+    let bandSum = 0;
+    for (let y = 0; y < 48; y += 1) for (let x = band * 8; x < band * 8 + 8; x += 1) bandSum += luma[y * 64 + x];
+    return bandSum / (8 * 48) - brightness;
+  });
+  return { brightness, contrast: Math.sqrt(variance / luma.length), sharpness: edges / luma.length, signature };
+}
+
+/** Keeps lit, non-blurry frames and picks the sharpest, most different one from each part of the walk. */
+export function selectDistinctKeyframes(candidates: KeyframeCandidate[], count: number): KeyframeCandidate[] {
+  const usable = candidates
+    .filter((frame) => frame.brightness > 20 && frame.brightness < 245 && frame.contrast > 5)
+    .sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+  if (usable.length <= count) return usable;
+  const distance = (a: number[], b: number[]) => a.reduce((sum, value, index) => sum + Math.abs(value - (b[index] ?? 0)), 0);
+  const picks: KeyframeCandidate[] = [];
+  for (let bucket = 0; bucket < count; bucket += 1) {
+    const slice = usable.slice(Math.floor((bucket * usable.length) / count), Math.floor(((bucket + 1) * usable.length) / count));
+    const previous = picks[picks.length - 1];
+    const score = (frame: KeyframeCandidate) => frame.sharpness + (previous ? Math.min(10, distance(frame.signature, previous.signature) / 20) : 0);
+    picks.push(slice.reduce((best, frame) => (score(frame) > score(best) ? frame : best)));
+  }
+  return picks;
+}
+
 export async function extractRepresentativeFrames(
   videoBlob: Blob,
   recordedDurationSeconds?: number,
@@ -486,39 +542,55 @@ export async function extractRepresentativeFrames(
     }
     const durationSeconds = Math.min(MAX_CAPTURED_VIDEO_SECONDS, measuredDuration);
 
-    const positions = [0.04, 0.35, 0.65, 0.96].map((fraction) =>
-      Math.max(0, Math.min(Math.max(0, durationSeconds - 0.05), durationSeconds * fraction)),
-    );
+    const seekTo = (timestampSeconds: number) => new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        video.onseeked = null;
+        video.onloadeddata = null;
+        video.onerror = null;
+        if (error) reject(error);
+        else resolve();
+      };
+      const timeout = window.setTimeout(() => finish(new Error("video-frame-timeout")), 8_000);
+      video.onseeked = () => finish();
+      video.onloadeddata = () => {
+        if (timestampSeconds === 0) finish();
+      };
+      video.onerror = () => finish(new Error("video-frame-unavailable"));
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && Math.abs(video.currentTime - timestampSeconds) < 0.001) {
+        finish();
+        return;
+      }
+      try {
+        video.currentTime = timestampSeconds;
+      } catch {
+        finish(new Error("video-frame-unavailable"));
+      }
+    });
+
+    // Sample the whole walk, then keep 4 sharp, well-lit, visually different views spread over time.
+    const sampleCount = 12;
+    const lastSafe = Math.max(0, durationSeconds - 0.05);
+    const candidates: KeyframeCandidate[] = [];
+    for (let i = 0; i < sampleCount; i += 1) {
+      const timestampSeconds = Math.max(0, Math.min(lastSafe, durationSeconds * (0.04 + (0.92 * i) / (sampleCount - 1))));
+      try {
+        await seekTo(timestampSeconds);
+        candidates.push({ timestampSeconds, ...measureFrame(video) });
+      } catch {
+        // Skip a frame the browser could not seek to.
+      }
+    }
+    let positions = selectDistinctKeyframes(candidates, 4).map((pick) => pick.timestampSeconds);
+    if (positions.length < 3) {
+      positions = [0.04, 0.35, 0.65, 0.96].map((fraction) => Math.max(0, Math.min(lastSafe, durationSeconds * fraction)));
+    }
 
     for (const timestampSeconds of positions) {
-      await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        const finish = (error?: Error) => {
-          if (settled) return;
-          settled = true;
-          window.clearTimeout(timeout);
-          video.onseeked = null;
-          video.onloadeddata = null;
-          video.onerror = null;
-          if (error) reject(error);
-          else resolve();
-        };
-        const timeout = window.setTimeout(() => finish(new Error("video-frame-timeout")), 8_000);
-        video.onseeked = () => finish();
-        video.onloadeddata = () => {
-          if (timestampSeconds === 0) finish();
-        };
-        video.onerror = () => finish(new Error("video-frame-unavailable"));
-        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && Math.abs(video.currentTime - timestampSeconds) < 0.001) {
-          finish();
-          return;
-        }
-        try {
-          video.currentTime = timestampSeconds;
-        } catch {
-          finish(new Error("video-frame-unavailable"));
-        }
-      });
+      await seekTo(timestampSeconds);
 
       const maxDimension = 768;
       const scale = Math.min(1, maxDimension / Math.max(video.videoWidth, video.videoHeight));
