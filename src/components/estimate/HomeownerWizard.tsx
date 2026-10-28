@@ -1340,7 +1340,7 @@ export function HomeownerWizard() {
         contact_phone: phone,
         zip_code: cleanZip,
         status: "new",
-      } as RoomEstimateRecord & { room_shape?: RoomShape; room_perimeter_ft?: number });
+      } as unknown as RoomEstimateRecord & { room_shape?: RoomShape; room_perimeter_ft?: number });
       setScreen("complete");
     } catch (error) {
       if (error instanceof PrivateRoomMediaError) {
