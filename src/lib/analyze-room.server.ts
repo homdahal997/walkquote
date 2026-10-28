@@ -175,7 +175,7 @@ function tryMerge(lines: Array<string | null>) {
 }
 
 /** Runs jobs with a small concurrency cap so one room does not flood the Meta API. */
-async function settleWithLimit<T>(jobs: Array<() => Promise<T>>, limit = 4) {
+async function settleWithLimit<T>(jobs: Array<() => Promise<T>>, limit = 6) {
   const results: PromiseSettledResult<T>[] = new Array(jobs.length);
   let next = 0;
   const worker = async () => {

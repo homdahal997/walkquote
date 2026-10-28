@@ -50,6 +50,8 @@ export interface RoomAssessment {
   scaleReference: "standard_door" | "none";
   suggestedDimensions: SuggestedDimensions | null;
   openingDeductionSqFt: number | null;
+  roomType?: string;
+  visibleWallCount?: number | null;
 }
 
 export interface ScopeLine {
@@ -103,7 +105,13 @@ export interface AnalysisReply {
   scaleReference?: "standard_door" | "none";
   suggestedDimensions?: SuggestedDimensions | null;
   openingDeductionSqFt?: number | null;
+  roomType?: string;
+  visibleWallCount?: number | null;
   maskText?: string | null;
+  frameMaskTexts?: Array<string | null>;
+  primaryFrameIndex?: number;
+  samDoorCounts?: Array<number | null>;
+  samWindowCounts?: Array<number | null>;
   trimMaskText?: string | null;
   openingMaskText?: string | null;
   segmentationUnavailable?: string[];
