@@ -114,7 +114,7 @@ export function AnalysisProgress({
               const status = analysisStatuses[index];
               return <li key={step.title} className={`flex items-start gap-3 rounded-xl border p-3 ${status === "working" ? "border-teal-300 bg-teal-50" : status === "done" ? "border-emerald-200 bg-emerald-50" : status === "error" ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-slate-50"}`}>
                 <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold ${status === "done" ? "bg-emerald-700 text-white" : status === "working" ? "bg-teal-800 text-white" : status === "error" ? "bg-rose-700 text-white" : "bg-white text-slate-500"}`}>{status === "done" ? <Check size={14} /> : status === "working" ? <Loader2 size={14} className="animate-spin" /> : status === "error" ? <X size={14} /> : status === "skipped" ? "–" : `0${index + 1}`}</span>
-                <span><strong className="block text-sm text-slate-950">{step.title}</strong><small className="mt-0.5 block text-sm leading-5 text-slate-600">{status === "skipped" ? index === 0 ? "No voice note was supplied" : "Optional surface overlay unavailable" : status === "done" ? "Complete" : status === "working" ? step.detail : step.detail}</small></span>
+                <span><strong className="block text-sm text-slate-950">{step.title}</strong><small className="mt-0.5 block text-sm leading-5 text-slate-600">{status === "skipped" ? index === 0 ? "No voice note, or no spoken words were heard" : "Optional surface overlay unavailable" : status === "done" ? "Complete" : status === "working" ? step.detail : step.detail}</small></span>
               </li>;
             })}
           </ol>
