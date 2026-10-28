@@ -266,7 +266,7 @@ async function reserveStage(visitorAddress: string, attemptId: string, stage: St
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const invalid = { error: "Invalid request." };
 
-export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string): Promise<Json> {
+export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string, options: { skipQuota?: boolean } = {}): Promise<Json> {
   const stage = body.stage;
   const sourceId = body.sourceId ?? body.sampleId;
   if (stage !== "transcribe" && stage !== "observe" && stage !== "segment") return invalid;
@@ -293,10 +293,11 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string)
     return stage === "transcribe" ? invalid : { error: "Invalid room images. Add three or four compressed JPEG views and try again." };
   }
 
-  // Closed testing (administrator only) skips daily reservations, as in the source app.
-  // reserveStage() enforces the public per-visitor and site-wide limits if live analysis is opened up.
-  void reserveStage;
-  void visitorAddress;
+  // Guests: 3 estimate runs per visitor per UTC day, 25 site-wide. Each run's stages count once.
+  if (!options.skipQuota) {
+    const quota = await reserveStage(visitorAddress, attemptId, stage);
+    if (quota) return quota;
+  }
 
   try {
     if (stage === "transcribe") return { transcript: await transcribe(audio as Uint8Array) };

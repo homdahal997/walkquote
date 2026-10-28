@@ -4,7 +4,7 @@ import { runAnalyzeRoom, type AnalyzeInput } from "./analyze-room.server";
 
 const MAX_BODY_CHARS = 4_250_000;
 
-/** Live analysis is closed testing: only the project administrator may run it (as in the source app). */
+/** True when the caller is signed in as the project administrator. */
 async function callerIsAdmin() {
   const auth = getRequestHeader("authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
@@ -29,12 +29,13 @@ export const analyzeRoomFn = createServerFn({ method: "POST" })
     return input as AnalyzeInput;
   })
   .handler(async ({ data }) => {
-    if (!(await callerIsAdmin())) return { error: "Live AI analysis is restricted to the project administrator account. Sign in as the administrator, or explore the interactive demo." };
+    // Guests may run live analysis within the daily limits; the administrator is exempt.
+    const isAdmin = await callerIsAdmin();
     const address =
       getRequestHeader("cf-connecting-ip") ??
       getRequestHeader("x-forwarded-for")?.split(",")[0]?.trim() ??
       "unknown";
-    const result = await runAnalyzeRoom(data, address);
+    const result = await runAnalyzeRoom(data, address, { skipQuota: isAdmin });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return JSON.parse(JSON.stringify(result)) as any;
   });

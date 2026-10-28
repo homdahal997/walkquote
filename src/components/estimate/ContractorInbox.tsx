@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
@@ -35,6 +35,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import type { EstimateLead, UsageDiagnosticReply } from "@/types/estimate";
 import { PageFooter } from "@/components/estimate/JourneyNav";
+import { SAMPLE_LEADS } from "@/lib/sample-leads";
 
 const USAGE_DIAGNOSTIC_FIELDS = ["id", "created_at", "status"] as const;
 const INBOX_LIST_FIELDS = [
@@ -134,6 +135,7 @@ function StoredAudio({ base64, mimeType }: { base64: string; mimeType?: string }
 
 export function ContractorInbox() {
   const navigate = useNavigate();
+  const isDemo = useLocation({ select: (location) => new URLSearchParams(location.searchStr).get("view") === "demo" });
   const reduceMotion = useReducedMotion();
   const [access, setAccess] = useState<"checking" | "signed-out" | "not-admin" | "loading" | "ready" | "error">("checking");
   const [leads, setLeads] = useState<EstimateLead[]>([]);
@@ -174,6 +176,14 @@ export function ContractorInbox() {
   useEffect(() => {
     let active = true;
     const verifyAdmin = async () => {
+      if (isDemo) {
+        setAdminEmail("Demo mode · sample leads");
+        setLeads(SAMPLE_LEADS);
+        setLeadDetails(Object.fromEntries(SAMPLE_LEADS.map((lead) => [lead.id, lead])));
+        setAccess("ready");
+        return;
+      }
+      setAccess("checking");
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!active) return;
@@ -195,7 +205,7 @@ export function ContractorInbox() {
     };
     void verifyAdmin();
     return () => { active = false; };
-  }, [loadLeads]);
+  }, [loadLeads, isDemo]);
 
   const releaseLeadMediaUrls = (leadId: string) => {
     const urls = privateMediaUrlsRef.current.get(leadId) ?? [];
@@ -292,7 +302,7 @@ export function ContractorInbox() {
       <header className="wq-header">
         <div className="wq-header-inner">
           <Link to="/" className="wq-brand" aria-label="WalkQuote home"><img className="wq-brand-mark" src={BRAND_MARK} alt="" /><span className="wq-brand-lockup"><span className="wq-brand-name">WalkQuote</span><span className="wq-brand-subtitle">Demo Painting Co. inbox</span></span></Link>
-          <div className="wq-header-right"><span className="wq-demo-status"><LockKeyhole size={13} /> ADMIN-ONLY INBOX</span><Link className="wq-header-link" to="/">Homeowner estimate <ArrowUpRight size={15} /></Link></div>
+          <div className="wq-header-right"><span className="wq-demo-status"><LockKeyhole size={13} /> {isDemo ? "DEMO INBOX · SAMPLE LEADS" : "ADMIN-ONLY INBOX"}</span><Link className="wq-header-link" to="/">Homeowner estimate <ArrowUpRight size={15} /></Link></div>
         </div>
       </header>
       <main className="wq-main inbox-main pt-6 sm:pt-10">
@@ -301,6 +311,8 @@ export function ContractorInbox() {
           {access === "ready" && <div className="flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />{adminEmail}<button type="button" onClick={() => void logout()} className="rounded-lg border border-slate-300 px-3 py-2 font-semibold hover:bg-slate-50">Sign out</button></div>}
         </div>
 
+        {isDemo && <div className="mt-6 flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 sm:flex-row sm:items-center sm:justify-between"><span><strong>Demo mode.</strong> These are illustrative sample leads; no real homeowner data is shown or saved.</span><Link to="/contractor" className="font-semibold underline">Open the real inbox</Link></div>}
+        {!isDemo && (access === "signed-out" || access === "not-admin") && <div className="mx-auto mt-6 flex max-w-xl flex-col items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center text-sm text-amber-950"><span>Just exploring? Open the inbox with pre-filled sample leads, no sign-in needed.</span><Link to="/contractor" search={{ view: "demo" }} className="inline-flex min-h-11 items-center rounded-lg bg-amber-300 px-4 py-2 font-bold text-slate-950 hover:bg-amber-200">Explore sample contractor inbox →</Link></div>}
         {access === "checking" && <div className="mt-6 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-5 text-base font-medium text-slate-700"><Loader2 className="animate-spin" size={19} /> Checking account access…</div>}
         {access === "signed-out" && <div className="mx-auto mt-10 max-w-xl rounded-[2rem] border border-slate-200 bg-white p-7 text-center shadow-sm sm:p-10"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-800"><LockKeyhole size={23} /></span><p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Administrator sign-in</p><h2 className="mt-2 text-2xl font-semibold text-slate-950">Sign in to review room requests.</h2><p className="mt-3 text-base leading-7 text-slate-600">Homeowner contact details and submitted media are available only through the administrator inbox.</p><Link className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-teal-800 px-5 py-3 text-base font-bold text-white hover:bg-teal-900" to="/login" search={{ from_url: "/contractor" }}>Sign in to the inbox <ArrowRight size={16} /></Link></div>}
         {access === "not-admin" && <div className="mx-auto mt-10 max-w-xl rounded-[2rem] border border-amber-200 bg-amber-50 p-7 text-center sm:p-10"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-amber-100 text-amber-900"><ShieldCheck size={23} /></span><p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-amber-900">Restricted inbox</p><h2 className="mt-2 text-2xl font-semibold text-slate-950">This view is reserved for the project administrator.</h2><p className="mt-3 text-base leading-7 text-slate-700">Estimate records remain hidden from this account.</p><Link className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-slate-800" to="/">Return to the homeowner estimate <ArrowRight size={16} /></Link></div>}
@@ -309,10 +321,10 @@ export function ContractorInbox() {
 
         {access === "ready" && (
           <>
-            <section className="mt-6 grid gap-5 rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)] sm:p-6" aria-labelledby="usage-diagnostic-heading">
+            {!isDemo && <section className="mt-6 grid gap-5 rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)] sm:p-6" aria-labelledby="usage-diagnostic-heading">
               <div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-teal-800"><ShieldCheck size={15} /> Admin-only · no AI</p><h2 id="usage-diagnostic-heading" className="mt-2 text-xl font-semibold text-slate-950">Check the daily-limit safeguards</h2><p className="mt-2 text-sm leading-6 text-slate-600">This free check reads a short-lived storage probe and tests whether a stale update is rejected. It does not change estimate counts.</p><p className="mt-2 text-sm leading-6 text-slate-500">A passing result tests this request only. It cannot prove that every server process shares one counter store or that one network address represents one person.</p></div>
               <div className="flex flex-col justify-center gap-3"><button type="button" onClick={() => void runUsageDiagnostic()} disabled={diagnosticBusy} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60">{diagnosticBusy ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={16} />}{diagnosticBusy ? "Testing storage…" : "Run no-cost check"}</button>{diagnosticError && <p className="text-sm text-rose-800" role="alert">{diagnosticError}</p>}{diagnosticResult && <div className={`rounded-xl p-3 text-sm ${diagnosticResult.ok ? "bg-emerald-50 text-emerald-900" : "bg-rose-50 text-rose-900"}`} role="status"><strong>{diagnosticResult.ok ? "Counter test passed" : "Counter test failed"}</strong><p className="mt-1">Process {diagnosticResult.processMarker} · connection {diagnosticResult.connectionFingerprint ?? "unavailable"}</p></div>}</div>
-            </section>
+            </section>}
 
             <div className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3 sm:p-5">
               <div><span className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Requests loaded</span><strong className="mt-1 block text-xl tabular-nums text-slate-950">{leads.length.toString().padStart(2, "0")}</strong></div>

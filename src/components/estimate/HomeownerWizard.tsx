@@ -140,7 +140,7 @@ function ExperienceModeSwitch({
           className={`group flex min-h-[84px] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-not-allowed disabled:opacity-60 ${mode === "homeowner" ? "border-teal-700 bg-teal-50 ring-2 ring-teal-700/15" : "border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50"}`}
         >
           <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl transition ${mode === "homeowner" ? "bg-teal-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-slate-200"}`}><Camera size={20} /></span>
-          <span className="min-w-0 flex-1"><strong className="block text-base font-bold text-slate-950">Capture My Own Room (Live AI)</strong><span className="mt-0.5 block text-sm leading-5 text-slate-600">Video or photos from your room. Live AI analysis is restricted to the project administrator account.</span></span>
+          <span className="min-w-0 flex-1"><strong className="block text-base font-bold text-slate-950">Capture My Own Room (Live AI)</strong><span className="mt-0.5 block text-sm leading-5 text-slate-600">Video or photos from your room. Live AI analysis is open to guests, up to 3 room runs per visitor per day.</span></span>
           <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${mode === "homeowner" ? "bg-teal-800 text-white" : "bg-slate-100 text-slate-500"}`}>{mode === "homeowner" ? "ACTIVE" : "LIVE"}</span>
         </button>
       </div>
