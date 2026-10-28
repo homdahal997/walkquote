@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { toast } from "sonner";
 import { Link, useLocation } from "@tanstack/react-router";
 import { AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowRight, Camera, ShieldCheck, Sparkles, Video } from "lucide-react";
