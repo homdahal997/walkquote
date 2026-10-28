@@ -63,31 +63,6 @@ function withTimeout(ms = 55_000) {
   return AbortSignal.timeout(ms);
 }
 
-async function* sseData(response: Response): AsyncGenerator<Json> {
-  const reader = response.body?.getReader();
-  if (!reader) return;
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let index: number;
-    while ((index = buffer.indexOf("\n")) >= 0) {
-      const line = buffer.slice(0, index).trim();
-      buffer = buffer.slice(index + 1);
-      if (!line.startsWith("data:")) continue;
-      const data = line.slice(5).trim();
-      if (!data || data === "[DONE]") continue;
-      try {
-        yield JSON.parse(data) as Json;
-      } catch {
-        /* ignore partial frames */
-      }
-    }
-  }
-}
-
 function outputText(payload: unknown) {
   const output = (payload as { output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }> })?.output;
   if (!Array.isArray(output)) return "";
