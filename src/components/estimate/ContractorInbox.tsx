@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
@@ -284,7 +284,7 @@ export function ContractorInbox() {
 
   const logout = async () => {
     await superdevClient.auth.logout(false);
-    navigate("/login");
+    navigate({ to: "/login" });
   };
 
   return (
@@ -302,7 +302,7 @@ export function ContractorInbox() {
         </div>
 
         {access === "checking" && <div className="mt-6 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-5 text-base font-medium text-slate-700"><Loader2 className="animate-spin" size={19} /> Checking account access…</div>}
-        {access === "signed-out" && <div className="mx-auto mt-10 max-w-xl rounded-[2rem] border border-slate-200 bg-white p-7 text-center shadow-sm sm:p-10"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-800"><LockKeyhole size={23} /></span><p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Administrator sign-in</p><h2 className="mt-2 text-2xl font-semibold text-slate-950">Sign in to review room requests.</h2><p className="mt-3 text-base leading-7 text-slate-600">Homeowner contact details and submitted media are available only through the administrator inbox.</p><Link className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-teal-800 px-5 py-3 text-base font-bold text-white hover:bg-teal-900" to="/login?from_url=%2Fcontractor">Sign in to the inbox <ArrowRight size={16} /></Link></div>}
+        {access === "signed-out" && <div className="mx-auto mt-10 max-w-xl rounded-[2rem] border border-slate-200 bg-white p-7 text-center shadow-sm sm:p-10"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-800"><LockKeyhole size={23} /></span><p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Administrator sign-in</p><h2 className="mt-2 text-2xl font-semibold text-slate-950">Sign in to review room requests.</h2><p className="mt-3 text-base leading-7 text-slate-600">Homeowner contact details and submitted media are available only through the administrator inbox.</p><Link className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-teal-800 px-5 py-3 text-base font-bold text-white hover:bg-teal-900" to="/login" search={{ from_url: "/contractor" }}>Sign in to the inbox <ArrowRight size={16} /></Link></div>}
         {access === "not-admin" && <div className="mx-auto mt-10 max-w-xl rounded-[2rem] border border-amber-200 bg-amber-50 p-7 text-center sm:p-10"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-amber-100 text-amber-900"><ShieldCheck size={23} /></span><p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-amber-900">Restricted inbox</p><h2 className="mt-2 text-2xl font-semibold text-slate-950">This view is reserved for the project administrator.</h2><p className="mt-3 text-base leading-7 text-slate-700">Estimate records remain hidden from this account.</p><Link className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-slate-800" to="/">Return to the homeowner estimate <ArrowRight size={16} /></Link></div>}
         {access === "loading" && <div className="mt-6 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-5 text-base font-medium text-slate-700"><Loader2 className="animate-spin" size={19} /> Loading protected estimate records…</div>}
         {access === "error" && <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm leading-6 text-rose-900 sm:flex-row sm:items-center"><CircleAlert size={18} /><span className="flex-1">{inboxError}</span><button className="min-h-11 rounded-xl border border-rose-300 bg-white px-4 py-2 font-semibold" type="button" onClick={() => void loadLeads()}>Retry</button></div>}

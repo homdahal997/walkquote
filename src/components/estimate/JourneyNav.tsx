@@ -1,5 +1,5 @@
 import { ArrowUpRight, Check } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 interface HeroHeaderProps {
   brandMark: string;

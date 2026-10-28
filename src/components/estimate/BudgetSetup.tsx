@@ -11,7 +11,7 @@ import {
   Sparkles,
   Video,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { money } from "@/lib/pricing";
 
 type BudgetChoice = {
@@ -60,7 +60,7 @@ export function BudgetSetup({
             <p className="mt-3 max-w-2xl text-base leading-6 text-slate-300 sm:hidden">Compare a sample room’s selected work, first-pass range and target budget. Change the scope or target to see the match update.</p>
             <p className="mt-5 hidden max-w-2xl text-lg leading-8 text-slate-300 sm:block">An estimate delay can hold up a homeowner’s next decision. A contractor may spend a visit before the requested work and budget fit are clear. WalkQuote brings room details, selected scope, a preliminary range and a target budget into one view. In the sample, change optional work or the target and watch the match update.</p>
             <div className="mt-4 grid max-w-2xl gap-2 sm:mt-6 sm:flex sm:flex-wrap sm:gap-3">
-              <Link to="/?experience=demo" className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-3 py-3 text-base font-bold text-slate-950 shadow-lg shadow-amber-950/20 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 sm:w-auto sm:px-5"><Sparkles size={18} /> Explore Interactive Demo <ArrowRight size={17} /></Link>
+              <Link to="/" search={{ experience: "demo" }} className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-3 py-3 text-base font-bold text-slate-950 shadow-lg shadow-amber-950/20 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 sm:w-auto sm:px-5"><Sparkles size={18} /> Explore Interactive Demo <ArrowRight size={17} /></Link>
               <button type="button" onClick={onContinue} className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-3 text-base font-bold text-white transition hover:border-white/50 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:w-auto sm:px-5"><Camera size={18} /> Capture My Own Room (Live AI)</button>
             </div>
             <p className="mt-3 flex items-start gap-2 text-base leading-6 text-slate-300 sm:text-sm sm:leading-5"><LockKeyhole size={16} className="mt-0.5 shrink-0 text-amber-300" />The prepared sample opens without sign-in and creates no real room request. Live AI analysis is restricted to the project administrator account.</p>

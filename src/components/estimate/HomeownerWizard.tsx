@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation } from "@tanstack/react-router";
 import { AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowRight, Camera, ShieldCheck, Sparkles, Video } from "lucide-react";
 import { isValidPhoneNumber } from "react-phone-number-input";
@@ -1027,9 +1027,9 @@ export function HomeownerWizard() {
   resetFlowRef.current = resetFlow;
 
   useEffect(() => {
-    const requestedExperience = new URLSearchParams(location.search).get("experience");
+    const requestedExperience = new URLSearchParams(location.searchStr).get("experience");
     resetFlowRef.current(requestedExperience === "demo" ? "demo" : "homeowner");
-  }, [location.search]);
+  }, [location.searchStr]);
 
   const continueFromSetup = () => {
     setSetupError("");
@@ -1678,7 +1678,7 @@ export function HomeownerWizard() {
             </div>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm leading-5 text-slate-300">Explore the sample now. It opens without sign-in and creates no room request.</p>
-              <Link to="/?experience=demo" onClick={() => setDemoVideoOpen(false)} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-300 px-5 py-3 text-base font-bold text-slate-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Explore the Interactive Demo <ArrowRight size={17} aria-hidden="true" /></Link>
+              <Link to="/" search={{ experience: "demo" }} onClick={() => setDemoVideoOpen(false)} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-300 px-5 py-3 text-base font-bold text-slate-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Explore the Interactive Demo <ArrowRight size={17} aria-hidden="true" /></Link>
             </div>
           </div>
         </DialogContent>
