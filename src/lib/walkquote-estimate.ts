@@ -1,5 +1,3 @@
-import { decodeMaskToRaster, parseImageStream, recordsOfKind } from "@meta-sam/parser";
-import type { ResponsesEvent } from "@meta-sam/parser";
 import type {
   DemoVideoSource,
   EstimateLead,
@@ -299,70 +297,62 @@ export function decodeBase64Bytes(value: string) {
   return bytes;
 }
 
-async function* replayMaskOutput(rawText: string): AsyncGenerator<ResponsesEvent> {
-  const lane = { item_id: "sam-wall-mask", output_index: 0, content_index: 0 };
-  yield { type: "response.output_text.delta", delta: rawText, ...lane };
-  yield { type: "response.output_text.done", text: rawText, ...lane };
-  yield { type: "response.completed" };
-}
-
+/**
+ * Rasterizes the polygon mask description returned by the room analysis service
+ * ({ v: "poly", w, h, polygons: [[[x, y], ...]] } with 0-1000 normalized points)
+ * into the packed 1-bit MaskData the overlays use.
+ */
 async function decodeWallMask(rawText: string): Promise<MaskData> {
   if (typeof rawText !== "string" || rawText.length < 20 || rawText.length > 1_800_000) {
     throw new Error("mask-output-invalid");
   }
-  const parsed = await parseImageStream(replayMaskOutput(rawText)).finalResult;
-  if (parsed.outcome.status !== "completed") throw new Error("mask-output-incomplete");
-  const masks = recordsOfKind(parsed.records, "mask");
-  const boxes = recordsOfKind(parsed.records, "box");
-  if (masks.length === 0 || masks.length > 16) throw new Error("mask-region-count");
-
-  const boxToken = rawText.match(/<\|box;([^|]+)\|>/);
-  if (!boxToken) throw new Error("mask-source-size-missing");
-  const boxFields = Object.fromEntries(
-    boxToken[1].split(";").map((part) => {
-      const separator = part.indexOf("=");
-      return separator < 0
-        ? [part.trim(), ""]
-        : [part.slice(0, separator).trim(), part.slice(separator + 1).trim()];
-    }),
-  );
-  const width = Number(boxFields.w);
-  const height = Number(boxFields.h);
+  const parsed = JSON.parse(rawText) as { v?: unknown; w?: unknown; h?: unknown; polygons?: unknown };
+  const width = Number(parsed.w);
+  const height = Number(parsed.h);
+  if (parsed.v !== "poly" || !Array.isArray(parsed.polygons)) throw new Error("mask-output-invalid");
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 3000 || height > 3000 || width * height > 4_000_000) {
     throw new Error("mask-source-size-invalid");
   }
+  const polygons = (parsed.polygons as unknown[])
+    .filter((poly): poly is number[][] => Array.isArray(poly) && poly.length >= 3)
+    .slice(0, 16)
+    .map((poly) => poly.map(([x, y]) => [((x ?? 0) / 1000) * width, ((y ?? 0) / 1000) * height] as const));
+  if (polygons.length === 0) throw new Error("mask-region-count");
+  if (typeof document === "undefined") throw new Error("mask-raster-unavailable");
 
-  const combined = new Uint8Array(width * height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("mask-raster-unavailable");
+  context.fillStyle = "#fff";
   const regions: MaskRegion[] = [];
-  let matchedMasks = 0;
-  for (const maskRecord of masks) {
-    const box = boxes.find((candidate) => candidate.objectId === maskRecord.objectId);
-    if (!box) continue;
-    const raster = decodeMaskToRaster(maskRecord.mask);
-    const maskWidth = maskRecord.mask.width;
-    const maskHeight = maskRecord.mask.height;
-    const bounds = maskRecord.bounds;
-    const boxWidth = bounds.right - bounds.left;
-    const boxHeight = bounds.bottom - bounds.top;
-    if (maskWidth < 1 || maskHeight < 1 || boxWidth < 1 || boxHeight < 1 || bounds.left < 0 || bounds.top < 0 || bounds.right > width || bounds.bottom > height || raster.length !== maskWidth * maskHeight) continue;
-
-    matchedMasks += 1;
-    if (regions.length < 12) regions.push({ left: bounds.left, top: bounds.top, right: bounds.right, bottom: bounds.bottom });
-    for (let y = 0; y < maskHeight; y += 1) {
-      const targetY = Math.min(height - 1, bounds.top + Math.floor(((y + 0.5) * boxHeight) / maskHeight));
-      for (let x = 0; x < maskWidth; x += 1) {
-        if (raster[y * maskWidth + x] !== 1) continue;
-        const targetX = Math.min(width - 1, bounds.left + Math.floor(((x + 0.5) * boxWidth) / maskWidth));
-        combined[targetY * width + targetX] = 1;
-      }
+  for (const poly of polygons) {
+    context.beginPath();
+    poly.forEach(([x, y], index) => (index === 0 ? context.moveTo(x, y) : context.lineTo(x, y)));
+    context.closePath();
+    context.fill();
+    if (regions.length < 12) {
+      const xs = poly.map(([x]) => x);
+      const ys = poly.map(([, y]) => y);
+      regions.push({
+        left: Math.max(0, Math.floor(Math.min(...xs))),
+        top: Math.max(0, Math.floor(Math.min(...ys))),
+        right: Math.min(width, Math.ceil(Math.max(...xs))),
+        bottom: Math.min(height, Math.ceil(Math.max(...ys))),
+      });
     }
   }
-  if (matchedMasks === 0 || !combined.some((pixel) => pixel === 1)) throw new Error("wall-mask-empty");
-
-  const packed = new Uint8Array(Math.ceil(combined.length / 8));
-  for (let index = 0; index < combined.length; index += 1) {
-    if (combined[index] === 1) packed[index >> 3] |= 1 << (7 - (index & 7));
+  const pixels = context.getImageData(0, 0, width, height).data;
+  const packed = new Uint8Array(Math.ceil((width * height) / 8));
+  let any = false;
+  for (let index = 0; index < width * height; index += 1) {
+    if ((pixels[index * 4 + 3] ?? 0) > 127) {
+      packed[index >> 3] = (packed[index >> 3] ?? 0) | (1 << (7 - (index & 7)));
+      any = true;
+    }
   }
+  if (!any) throw new Error("wall-mask-empty");
   return { width, height, dataBase64: encodeBytesBase64(packed), regions };
 }
 
