@@ -4,6 +4,24 @@ import { runAnalyzeRoom, type AnalyzeInput } from "./analyze-room.server";
 
 const MAX_BODY_CHARS = 4_250_000;
 
+/** Live analysis is closed testing: only the project administrator may run it (as in the source app). */
+async function callerIsAdmin() {
+  const auth = getRequestHeader("authorization");
+  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return false;
+  const { createClient } = await import("@supabase/supabase-js");
+  const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+  const client = createClient(process.env["SUPABASE_URL"]!, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}`, apikey: key } },
+  });
+  const { data: claims } = await client.auth.getClaims(token);
+  const userId = claims?.claims?.sub;
+  if (!userId) return false;
+  const { data } = await client.rpc("has_role", { _user_id: userId, _role: "admin" });
+  return data === true;
+}
+
 export const analyzeRoomFn = createServerFn({ method: "POST" })
   .inputValidator((input: unknown): AnalyzeInput => {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid request.");
@@ -11,6 +29,7 @@ export const analyzeRoomFn = createServerFn({ method: "POST" })
     return input as AnalyzeInput;
   })
   .handler(async ({ data }) => {
+    if (!(await callerIsAdmin())) return { error: "Live AI analysis is restricted to the project administrator account. Sign in as the administrator, or explore the interactive demo." };
     const address =
       getRequestHeader("cf-connecting-ip") ??
       getRequestHeader("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -22,6 +41,7 @@ export const analyzeRoomFn = createServerFn({ method: "POST" })
 
 /** Server check shown in the contractor inbox: confirms the usage store is reachable. */
 export const analysisDiagnosticFn = createServerFn({ method: "POST" }).handler(async () => {
+  if (!(await callerIsAdmin())) throw new Error("Administrator access is required.");
   const { runUsageDiagnostic } = await import("./analyze-room.server");
   const address = getRequestHeader("cf-connecting-ip") ?? getRequestHeader("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   return runUsageDiagnostic(address);
