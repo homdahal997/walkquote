@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { RoomSizeAdjuster } from "@/components/estimate/RoomSizeAdjuster";
+import type { OpeningCrossCheck } from "@/lib/room-sizes";
 import { motion, type HTMLMotionProps } from "framer-motion";
 import {
   ArrowLeft,
@@ -88,6 +90,8 @@ export interface EstimateEditorState {
   observations: string[];
   assessment: RoomAssessment;
   onAdjustCount?: (key: "visibleDoorCount" | "visibleWindowCount", delta: number) => void;
+  updateRoomSize?: (key: "lengthFt" | "widthFt" | "ceilingHeightFt", value: string) => void;
+  quoteActions?: ReactNode;
   estimateSource: EstimateSource;
   manualWallAreaOverride: number | null;
   wallAreaEditing: boolean;
@@ -112,6 +116,8 @@ export interface EstimateEditorState {
   scopeFollowUpsOpen: boolean;
   doorScopeSelected: boolean;
   patchScopeSelected: boolean;
+  frameWallMasks?: Array<MaskData | null>;
+  openingChecks?: { doors: OpeningCrossCheck; windows: OpeningCrossCheck };
 }
 
 export interface EstimateEditorHandlers {
@@ -325,6 +331,8 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
     observations,
     assessment,
     onAdjustCount,
+    updateRoomSize,
+    quoteActions,
     estimateSource,
     manualWallAreaOverride,
     wallAreaEditing,
@@ -349,7 +357,14 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
     scopeFollowUpsOpen,
     doorScopeSelected,
     patchScopeSelected,
+    frameWallMasks,
+    openingChecks,
   } = state;
+  const [previewIndex, setPreviewFrame] = useState(primaryFrameIndex);
+  const maskForFrame = (index: number) => (index === primaryFrameIndex ? mask : frameWallMasks?.[index] ?? null);
+  const showFramePicker = mode === "homeowner" && activeRoomFrames.length > 1 && activeRoomFrames.some((_, index) => index !== primaryFrameIndex && maskForFrame(index));
+  const previewMask = maskForFrame(previewIndex) ?? mask;
+  const previewImageUrl = maskForFrame(previewIndex) ? activeRoomFrames[previewIndex]?.previewUrl ?? primaryImageUrl : primaryImageUrl;
   const {
     onScreenChange,
     backFromEstimate,
@@ -521,6 +536,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
             <div className={`mt-7 rounded-2xl border p-4 sm:p-5 ${budgetStatus === "within" ? "border-emerald-300/30 bg-emerald-500/10" : budgetStatus === "close" ? "border-amber-300/30 bg-amber-400/10" : budgetStatus === "over" ? "border-rose-300/30 bg-rose-500/10" : "border-white/10 bg-white/5"}`}>
               <div className="flex flex-wrap items-center justify-between gap-3"><span className="inline-flex items-center gap-2 text-lg font-semibold"><span className={`h-2.5 w-2.5 rounded-full ${budgetStatus === "within" ? "bg-emerald-400" : budgetStatus === "close" ? "bg-amber-300" : budgetStatus === "over" ? "bg-rose-400" : "bg-slate-400"}`} /><span aria-live="polite" aria-atomic="true">{statusText}</span></span><span className="text-sm font-semibold tabular-nums text-slate-200">{budgetAmount === null ? "No target" : `Target ${money(budgetAmount)}`}</span></div>
               <p className="mt-2 text-sm leading-6 text-slate-300">{statusCopy}</p>
+              {quoteActions && <div className="mt-4 border-t border-white/10 pt-4">{quoteActions}</div>}
               {mode === "demo" && <div className="mt-5 border-t border-white/10 pt-4">
                 <div className="flex flex-wrap items-center justify-between gap-3"><label htmlFor="demo-budget-slider" className="text-sm font-semibold text-slate-100">Adjust the sample budget target</label><strong className="text-base tabular-nums text-teal-200">{budgetAmount === null ? "No target" : money(budgetAmount)}</strong></div>
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="Choose a sample budget target">
@@ -539,6 +555,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
               <div className="rounded-xl bg-white/5 p-4"><span className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-400">{mode === "demo" ? "Room-size basis" : "Quantity basis"}</span><strong className="mt-2 block text-base leading-6 tabular-nums text-white">{measurementsLabel}</strong></div>
               <div className="rounded-xl bg-white/5 p-4"><span className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Estimate source</span><strong className="mt-2 block text-sm leading-5 text-white">{confidenceLabel}</strong></div>
             </div>
+            {mode === "homeowner" && estimateSource === "doorway_scale" && <RoomSizeAdjuster fields={measurementFields} assessment={assessment} onFieldChange={updateRoomSize ?? updateMeasurement} onAdjustCount={onAdjustCount} openingChecks={openingChecks} />}
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <div className="rounded-xl bg-white/5 p-4"><span className="block text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Gross wall area</span><strong className="mt-1 block text-base tabular-nums text-white">{typeof dimensions.grossWallArea === "number" ? `${formatDimensionValue(dimensions.grossWallArea)} sq ft` : "Not calculated"}</strong><span className="mt-1 block text-xs leading-5 text-slate-400">{typeof dimensions.grossWallArea === "number" ? "Before opening deduction" : "No gross area from the entered net figure"}</span></div>
               <div className="rounded-xl bg-white/5 p-4"><span className="block text-xs font-bold uppercase tracking-[0.1em] text-slate-400">Opening deduction</span><strong className="mt-1 block text-base tabular-nums text-white">{typeof dimensions.grossWallArea !== "number" ? "Not calculated" : dimensions.openingDeductionSqFt !== null ? `−${formatDimensionValue(dimensions.openingDeductionSqFt)} sq ft` : "Not deducted"}</strong><span className="mt-1 block text-xs leading-5 text-slate-400">Only applied when supported by the views</span></div>
@@ -570,7 +587,17 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
             <div><p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">05 · Wall color preview</p><h2 id="preview-heading" className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{mode === "demo" ? "Try a color on the sample room." : "Try a color on this room image."}</h2></div>
             <span className="inline-flex items-center gap-2 self-start rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-slate-600">{mode === "demo" ? "Illustrative wall mask" : mask ? "Wall outline ready" : "Original image"}</span>
           </div>
-          {primaryImageUrl ? <div className="mt-4">{mode === "demo" ? <SampleWallTintPreview room={sampleRoom ?? ROOMS.living} color={color} split={split} onSplit={setSplit} /> : <WallTintPreview imageUrl={primaryImageUrl} imageAlt={primaryImageAlt} mask={mask} color={color} split={split} onSplit={setSplit} />}</div> : <div className="mt-4 grid aspect-video place-items-center rounded-2xl bg-slate-100 text-slate-600"><Info size={22} /><span className="mt-2 text-sm">Room photo unavailable</span></div>}
+          {primaryImageUrl ? <div className="mt-4">{mode === "demo" ? <SampleWallTintPreview room={sampleRoom ?? ROOMS.living} color={color} split={split} onSplit={setSplit} /> : <WallTintPreview imageUrl={previewImageUrl} imageAlt={primaryImageAlt} mask={previewMask} color={color} split={split} onSplit={setSplit} />}</div> : <div className="mt-4 grid aspect-video place-items-center rounded-2xl bg-slate-100 text-slate-600"><Info size={22} /><span className="mt-2 text-sm">Room photo unavailable</span></div>}
+          {showFramePicker && (
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Choose which room view to preview" data-testid="preview-frame-picker">
+              {activeRoomFrames.map((frame, index) => (
+                <button key={frame.id} type="button" data-testid={`preview-frame-${index}`} aria-pressed={index === previewIndex} disabled={!maskForFrame(index)} onClick={() => setPreviewFrame(index)} className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition disabled:cursor-not-allowed disabled:opacity-40 ${index === previewIndex ? "border-teal-700" : "border-transparent hover:border-slate-300"}`}>
+                  <img src={frame.previewUrl} alt={`View ${index + 1}`} className="h-full w-full object-cover" />
+                  <span className="absolute bottom-0.5 left-1 rounded bg-slate-950/70 px-1 text-[10px] font-bold text-white">{index + 1}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="mt-4 grid grid-cols-2 gap-2" role="group" aria-label={mode === "demo" ? "Choose a sample wall color" : "Choose a paint color"}>
             {(mode === "demo" ? DEMO_COLORS : COLORS).map((choice) => {
               const active = color.name === choice.name && color.hex.toUpperCase() === choice.hex.toUpperCase();

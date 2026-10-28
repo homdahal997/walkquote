@@ -4,6 +4,7 @@ import {
   ROOM_IMAGES,
   SURFACE_PROMPTS,
   buildObservePrompt,
+  countSamBoxes,
   parseObservationJson,
   redactPrivateStrings,
   validateRoomFrames,
@@ -105,7 +106,14 @@ async function observe(imageUrls: string[], transcript: string, sourceId: Analys
         {
           type: "message",
           role: "user",
-          content: [{ type: "input_text", text: prompt }, ...imageUrls.map((url) => ({ type: "input_image", image_url: url }))],
+          content: [
+            { type: "input_text", text: prompt },
+            // Numbered views let Muse Spark track overlap between consecutive frames of the walk.
+            ...imageUrls.flatMap((url, index) => [
+              { type: "input_text", text: `View ${index + 1} of ${imageUrls.length}` },
+              { type: "input_image", image_url: url },
+            ]),
+          ],
         },
       ],
     }),
@@ -113,8 +121,8 @@ async function observe(imageUrls: string[], transcript: string, sourceId: Analys
   });
   if (!response.ok) await failFromResponse(response);
   const text = outputText(await response.json());
-  if (!text || text.length > 3000) throw new GatewayError(502, "Room analysis did not finish. Please retry.");
-  return parseObservationJson(text);
+  if (!text || text.length > 8000) throw new GatewayError(502, "Room analysis did not finish. Please retry.");
+  return parseObservationJson(text, transcript);
 }
 
 /** Runs one SAM 3.1 concept prompt and returns its raw segmentation line (empty when nothing matched). */
@@ -139,8 +147,7 @@ async function samConcept(imageUrl: string, concept: string) {
  * Segments one surface type with SAM 3.1. Several concepts are merged into one frame line
  * with re-numbered object ids so the browser decodes it with @meta-sam/parser.
  */
-async function segment(imageUrl: string, concepts: readonly string[]) {
-  const lines = await Promise.all(concepts.map((concept) => samConcept(imageUrl, concept)));
+function mergeConceptLines(lines: string[]) {
   const records: string[] = [];
   for (const line of lines) {
     const body = line.replace(/^<0f>/, "");
@@ -153,6 +160,36 @@ async function segment(imageUrl: string, concepts: readonly string[]) {
   const out = `<0f>${records.join(",")}`;
   if (out.length > MAX_MASK_TEXT_CHARS) throw new Error("segmentation-too-large");
   return out;
+}
+
+async function segment(imageUrl: string, concepts: readonly string[]) {
+  return mergeConceptLines(await Promise.all(concepts.map((concept) => samConcept(imageUrl, concept))));
+}
+
+function tryMerge(lines: Array<string | null>) {
+  try {
+    return mergeConceptLines(lines.filter((line): line is string => typeof line === "string"));
+  } catch {
+    return null;
+  }
+}
+
+/** Runs jobs with a small concurrency cap so one room does not flood the Meta API. */
+async function settleWithLimit<T>(jobs: Array<() => Promise<T>>, limit = 6) {
+  const results: PromiseSettledResult<T>[] = new Array(jobs.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < jobs.length) {
+      const index = next++;
+      try {
+        results[index] = { status: "fulfilled", value: await jobs[index]() };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, worker));
+  return results;
 }
 
 async function sha256Hex(value: string) {
@@ -247,25 +284,46 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
     if (!imageUrl) return invalid;
     if (sourceId !== "homeowner") return { maskText: await segment(imageUrl, SURFACE_PROMPTS.walls) };
 
-    const [wall, trim, opening] = await Promise.allSettled([
-      segment(imageUrl, SURFACE_PROMPTS.walls),
-      segment(imageUrl, SURFACE_PROMPTS.trim),
-      segment(imageUrl, SURFACE_PROMPTS.openings),
+    // Walls on every view (color preview per angle), doors and windows on every view
+    // (SAM 3.1 cross-checks Muse Spark's counts), trim on the primary view.
+    const primaryIndex = Math.floor((frames.length - 1) / 2);
+    const perFrameJobs = frames.flatMap((frame) => [
+      () => samConcept(frame, SURFACE_PROMPTS.walls[0]),
+      () => samConcept(frame, "door"),
+      () => samConcept(frame, "window"),
     ]);
-    let remaining = MAX_SEGMENTATION_BUNDLE_CHARS;
-    const keep = (r: PromiseSettledResult<string>) => {
-      if (r.status !== "fulfilled" || r.value.length > remaining) return null;
-      remaining -= r.value.length;
-      return r.value;
+    const trimJobs = SURFACE_PROMPTS.trim.map((concept) => () => samConcept(frames[primaryIndex], concept));
+    const settled = await settleWithLimit<string>([...perFrameJobs, ...trimJobs]);
+    const lineAt = (index: number) => {
+      const result = settled[index];
+      return result.status === "fulfilled" ? result.value : null;
     };
-    const maskText = keep(wall);
-    const trimMaskText = keep(trim);
-    const openingMaskText = keep(opening);
+    let remaining = MAX_SEGMENTATION_BUNDLE_CHARS;
+    const keep = (value: string | null) => {
+      if (!value || value.length > remaining) return null;
+      remaining -= value.length;
+      return value;
+    };
+    const wallLine = (i: number) => tryMerge([lineAt(i * 3)]);
+    const maskText = keep(wallLine(primaryIndex));
+    const trimMaskText = keep(tryMerge(trimJobs.map((_, index) => lineAt(perFrameJobs.length + index))));
+    const openingMaskText = keep(tryMerge([lineAt(primaryIndex * 3 + 1), lineAt(primaryIndex * 3 + 2)]));
+    const frameMaskTexts = frames.map((_, i) => (i === primaryIndex ? maskText : keep(wallLine(i))));
+    const countAt = (index: number, kind: "door" | "window") => {
+      const result = settled[index];
+      return result.status === "fulfilled" ? countSamBoxes(result.value, kind) : null;
+    };
+    const samDoorCounts = frames.map((_, i) => countAt(i * 3 + 1, "door"));
+    const samWindowCounts = frames.map((_, i) => countAt(i * 3 + 2, "window"));
     if (!maskText && !trimMaskText && !openingMaskText) throw new Error("segmentation-unavailable");
     return {
       maskText,
       trimMaskText,
       openingMaskText,
+      frameMaskTexts,
+      primaryFrameIndex: primaryIndex,
+      samDoorCounts,
+      samWindowCounts,
       segmentationUnavailable: [
         ...(maskText ? [] : ["walls"]),
         ...(trimMaskText ? [] : ["trim"]),
