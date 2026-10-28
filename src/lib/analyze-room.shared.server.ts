@@ -1,3 +1,4 @@
+import { normalizeRoomType, openingDeductionSqFt, standardRoomDimensions, type StandardRoomType } from "./room-sizes";
 // Server-only room analysis helpers (migrated from the former analyze-room function).
 // Input validation, privacy redaction, and observation parsing are preserved from the source;
 // model calls now go through Lovable AI Gateway.
@@ -117,7 +118,6 @@ function validateRoomFrames(value: unknown): string[] {
   });
 }
 
-import { normalizeRoomType, openingDeductionSqFt, standardRoomDimensions, type StandardRoomType } from "./room-sizes";
 
 type ScaleAnchor = "standard_door" | "light_switch" | "outlet" | "countertop" | "furniture" | "ceiling_height" | "spoken_note" | "room_type_default";
 
