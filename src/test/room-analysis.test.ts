@@ -5,6 +5,9 @@ import {
   normalizeRoomType,
   openingDeductionSqFt,
   standardRoomDimensions,
+  crossCheckOpeningCount,
+  numberRoomLabels,
+  roomTypeName,
 } from "@/lib/room-sizes";
 import { buildObservePrompt, countSamBoxes, parseObservationJson, spokenDimensions } from "@/lib/analyze-room.shared.server";
 import { selectDistinctKeyframes, type KeyframeCandidate } from "@/lib/room-media";
