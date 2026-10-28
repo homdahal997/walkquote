@@ -128,6 +128,9 @@ export function printQuote(doc: QuoteDocument) {
 export async function downloadQuotePdf(doc: QuoteDocument) {
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ unit: "pt", format: "letter" });
+  // Built-in PDF fonts are Latin-1 only, so swap typographic dashes and quotes before drawing.
+  const rawText = pdf.text.bind(pdf);
+  pdf.text = ((text: string | string[], ...rest: unknown[]) => (rawText as (...args: unknown[]) => unknown)(Array.isArray(text) ? text.map(pdfSafe) : pdfSafe(text), ...rest)) as typeof pdf.text;
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 40;
@@ -152,7 +155,7 @@ export async function downloadQuotePdf(doc: QuoteDocument) {
   pdf.text(`${money(doc.low)} – ${money(doc.high)}`, margin + 14, y + 44);
   pdf.setFont("helvetica", "normal").setFontSize(9);
   const [r, g, b] = hexToRgb(doc.colorHex);
-  pdf.setFillColor(r, g, b).circle(right - 150, y + 21, 5, "F");
+  pdf.setFillColor(r, g, b).setDrawColor(148, 163, 184).setLineWidth(0.8).circle(right - 150, y + 21, 5, "FD");
   pdf.text(`${doc.colorName} ${doc.colorHex.toUpperCase()}`, right - 140, y + 24);
   pdf.text(`Budget: ${doc.budgetLabel}`, right - 140, y + 40);
   y += 76;
@@ -195,6 +198,15 @@ export async function downloadQuotePdf(doc: QuoteDocument) {
     notesY += wrapped.length * 9 + 3;
   }
   pdf.save(quoteFileName(doc));
+}
+
+export function pdfSafe(value: string) {
+  return value
+    .replace(/[\u2012-\u2015\u2212]/g, "-")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\u2026/g, "...")
+    .replace(/[^\x00-\xff]/g, "");
 }
 
 function hexToRgb(hex: string): [number, number, number] {

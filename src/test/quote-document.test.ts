@@ -2,6 +2,26 @@ import { describe, expect, it, vi } from "vitest";
 import { buildQuoteDocument, downloadQuotePdf, pdfSafe, quoteFileName, quoteHtml, type QuoteDocRoom } from "@/lib/quote-document";
 import { baseboardLengthFt } from "@/lib/room-sizes";
 
+const pdfCalls = vi.hoisted(() => ({ saved: [] as string[], texts: [] as string[] }));
+vi.mock("jspdf", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("jspdf")>();
+  class RecordingPdf extends actual.jsPDF {
+    constructor(...args: ConstructorParameters<typeof actual.jsPDF>) {
+      super(...args);
+      const draw = this.text.bind(this);
+      this.text = ((text: string | string[], ...rest: unknown[]) => {
+        pdfCalls.texts.push(...(Array.isArray(text) ? text : [text]));
+        return (draw as (...args: unknown[]) => unknown)(text, ...rest);
+      }) as typeof this.text;
+      this.save = ((name: string) => {
+        pdfCalls.saved.push(name);
+        return this;
+      }) as unknown as typeof this.save;
+    }
+  }
+  return { ...actual, jsPDF: RecordingPdf };
+});
+
 const room = (label: string, low: number, high: number): QuoteDocRoom => ({
   label,
   sizeLabel: "12 × 14 ft, 8 ft ceiling",
@@ -48,11 +68,10 @@ describe("printable quote", () => {
   });
 
   it("draws and saves a PDF without errors", async () => {
-    const { jsPDF } = await import("jspdf");
-    const save = vi.spyOn(jsPDF.API, "save").mockImplementation(function (this: unknown) { return this as never; });
     await downloadQuotePdf(doc([room("Bedroom", 794, 993)]));
-    expect(save).toHaveBeenCalledWith("walkquote-bedroom-2026-06-15.pdf");
-    save.mockRestore();
+    expect(pdfCalls.saved).toEqual(["walkquote-bedroom-2026-06-15.pdf"]);
+    expect(pdfCalls.texts.some((text) => text.includes("$794 - $993"))).toBe(true);
+    expect(pdfCalls.texts.every((text) => !/[^\x00-\xff]/.test(text))).toBe(true);
   });
 });
 
