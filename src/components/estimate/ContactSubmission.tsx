@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { FormEvent } from "react";
 import { motion, type HTMLMotionProps } from "framer-motion";
 import {
@@ -43,6 +44,7 @@ export interface ContactSubmissionState {
   mediaShareConsent: boolean;
   formError: string;
   submitting: boolean;
+  quoteActions?: ReactNode;
 }
 
 export interface ContactSubmissionHandlers {
@@ -86,6 +88,7 @@ export function ContactSubmission({ screen, motionProps, state, handlers }: Cont
     mediaShareConsent,
     formError,
     submitting,
+    quoteActions,
   } = state;
   const {
     setScreen,
@@ -155,6 +158,7 @@ export function ContactSubmission({ screen, motionProps, state, handlers }: Cont
         <div><span className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Wall color</span><strong className="mt-1 flex items-center gap-2 text-base text-slate-950"><i className="h-5 w-5 rounded-full border border-slate-900/10" style={{ backgroundColor: color.hex }} />{color.name}</strong></div>
       </div>
       <p className="mt-5 text-sm leading-6 text-slate-600">The range uses the supplied price book and an {PRICE_BOOK.taxAndConsumables.label} planning assumption. The contractor confirms surface conditions, local pricing, and final scope.</p>
+      {quoteActions && <div className="mx-auto mt-6 max-w-md text-left"><p className="mb-2 text-center text-sm font-semibold text-slate-700">Keep a copy or share it with family</p>{quoteActions}</div>}
       <button type="button" onClick={resetFlow} className="mt-7 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-950 px-6 py-3 text-base font-bold text-white transition hover:bg-slate-800">Start another estimate <RefreshCw size={16} /></button>
     </motion.section>
   );
