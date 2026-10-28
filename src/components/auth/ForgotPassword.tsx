@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
-import { AuthFrame } from "./Login";
+import { AuthFrame } from "@/components/auth/Login";
 import { requestPasswordReset } from "@/lib/auth-pages";
 
 const ForgotPassword = () => {

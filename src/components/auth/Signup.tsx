@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { AlertCircle, ArrowRight } from "lucide-react";
-import { AuthFrame } from "./Login";
+import { AuthFrame } from "@/components/auth/Login";
 import { signUp } from "@/lib/auth-pages";
 
 const Signup = () => {
@@ -27,7 +28,8 @@ const Signup = () => {
     setBusy(true);
     try {
       await signUp(name.trim(), email.trim(), password);
-      navigate({ to: "/" });
+      toast.success("Check your email to confirm your account, then sign in.");
+      navigate({ to: "/login" });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Account creation failed. Please try again.");
     } finally {

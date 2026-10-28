@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import type { FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { AlertCircle, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { AuthFrame } from "./Login";
+import { AuthFrame } from "@/components/auth/Login";
 import { resetPassword } from "@/lib/auth-pages";
 
 const ResetPassword = () => {
@@ -27,7 +28,7 @@ const ResetPassword = () => {
     }
     setBusy(true);
     try {
-      await resetPassword(token, password);
+      await resetPassword(password);
       toast.success("Password updated. Sign in to continue.");
       navigate({ to: "/login" });
     } catch (caught) {
@@ -41,7 +42,7 @@ const ResetPassword = () => {
     <AuthFrame
       eyebrow="PASSWORD RESET"
       title={token ? "Choose a new password." : "This link is invalid."}
-      description={token ? "Set a new password for your WalkQuote account." : "The reset link is missing its token. Request a new link to continue."}
+      description={token ? "Set a new password for your WalkQuote account." : "Open the reset link from your email on this device. Request a new link to continue."}
     >
       {token ? (
         <form className="auth-form" onSubmit={submit}>
