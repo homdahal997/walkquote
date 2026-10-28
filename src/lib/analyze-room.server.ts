@@ -145,7 +145,7 @@ async function segment(imageUrl: string, concepts: readonly string[]) {
   for (const line of lines) {
     const body = line.replace(/^<0f>/, "");
     if (!body) continue;
-    for (const match of body.matchAll(/(?:^|,)\d+(<\|box;[^|]+\|><\|mask;[^|]+\|>)/g)) {
+    for (const match of body.matchAll(/(?:^|,)\d+(<\|box;[^|]*\|><\|mask;[\s\S]*?\|>)(?=,\d+<\|box|$)/g)) {
       if (records.length < 16) records.push(`${records.length}${match[1]}`);
     }
   }
