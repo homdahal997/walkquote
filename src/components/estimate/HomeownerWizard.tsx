@@ -345,12 +345,12 @@ export function HomeownerWizard() {
       openingDeductionSqFt,
       wallArea: activeWallAreaOverride ?? calculatedPaintableArea,
       ceilingArea,
-      trimLength: perimeterFt,
+      trimLength: estimateSource === "doorway_scale" ? baseboardLengthFt(perimeterFt, assessment.visibleDoorCount) : perimeterFt,
       perimeterFt,
       ...(doorSides !== undefined ? { doorSides } : {}),
       ...(patchCount !== undefined ? { patchCount } : {}),
     };
-  }, [mode, sampleRoomId, roomShape, measurementFields, doorScopeSelected, patchScopeSelected, estimateSource, assessment.scaleReference, assessment.openingDeductionSqFt, manualWallAreaOverride, wallAreaEditing, wallAreaDraft]);
+  }, [mode, sampleRoomId, roomShape, measurementFields, doorScopeSelected, patchScopeSelected, estimateSource, assessment.scaleReference, assessment.openingDeductionSqFt, assessment.visibleDoorCount, manualWallAreaOverride, wallAreaEditing, wallAreaDraft]);
 
   const items = useMemo(
     () => dimensions ? buildScopeLines(dimensions, color, (mode as string) === "demo" && sampleRoom?.darkWalls ? "dark" : assessment.wallTone, transcript, mode) : [],
