@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ContractorInbox } from "@/components/estimate/ContractorInbox";
 
 export const Route = createFileRoute("/contractor")({
+  validateSearch: (search: Record<string, unknown>): { view?: "demo" } =>
+    search["view"] === "demo" ? { view: "demo" } : {},
   head: () => ({
     meta: [
       { title: "Estimate inbox — WalkQuote" },
