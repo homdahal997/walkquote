@@ -1511,6 +1511,12 @@ export function HomeownerWizard() {
     transcript,
     observations,
     assessment,
+    onAdjustCount: (key: "visibleDoorCount" | "visibleWindowCount", delta: number) => setAssessment((prev) => {
+      const next = { ...prev, [key]: Math.max(0, Math.min(20, (prev[key] ?? 0) + delta)) };
+      next.openingDeductionSqFt = (next.visibleDoorCount ?? 0) * 20 + (next.visibleWindowCount ?? 0) * 15 || null;
+      if (next.openingDeductionSqFt !== null) next.scaleReference = "standard_door";
+      return next;
+    }),
     estimateSource,
     manualWallAreaOverride,
     wallAreaEditing,
