@@ -130,7 +130,7 @@ async function chatText(messages: Json[]) {
 async function transcribe(bytes: Uint8Array) {
   const form = new FormData();
   form.append("model", TRANSCRIBE_MODEL);
-  form.append("file", new File([bytes], "room-note.wav", { type: "audio/wav" }));
+  form.append("file", new File([bytes as unknown as BlobPart], "room-note.wav", { type: "audio/wav" }));
   form.append("response_format", "json");
   const response = await fetch(`${GATEWAY}/audio/transcriptions`, {
     method: "POST",
