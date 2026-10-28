@@ -12,10 +12,12 @@ const MAX_TRANSCRIPT_CHARS = 600;
 const MAX_MASK_TEXT_CHARS = 1_800_000;
 const MAX_SEGMENTATION_BUNDLE_CHARS = 4_000_000;
 
+// SAM 3.1 concept prompts must be short noun phrases, one concept per request (Meta docs);
+// long instructions return zero matches. Each surface lists the concepts merged into its mask.
 const SURFACE_PROMPTS = {
-  walls: "Segment only visible painted interior wall surfaces. Exclude doors, windows, openings, door and window casing, baseboards, other trim, ceiling, floor, furniture, and surface marks. This wall mask is for a color preview only, not physical measurement.",
-  trim: "Segment only visible painted interior trim surfaces, including baseboards, crown molding, and door or window casing. Exclude broad wall fields, door leaves, window glass, ceiling, floor, furniture, and surface marks. This is a visual region hint, not a measurement.",
-  openings: "Segment only visible interior door and window openings, including the visible door leaf or window area. Exclude surrounding wall fields, baseboards, casing and other trim, ceiling, floor, furniture, and surface marks. This is a visual region hint, not a measurement.",
+  walls: ["painted wall"],
+  trim: ["baseboard", "door frame"],
+  openings: ["door", "window"],
 } as const;
 
 const ROOM_IMAGES = {
