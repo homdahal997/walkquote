@@ -486,7 +486,7 @@ export async function extractRepresentativeFrames(
     }
     const durationSeconds = Math.min(MAX_CAPTURED_VIDEO_SECONDS, measuredDuration);
 
-    const positions = [0.12, 0.38, 0.62, 0.88].map((fraction) =>
+    const positions = [0.04, 0.35, 0.65, 0.96].map((fraction) =>
       Math.max(0, Math.min(Math.max(0, durationSeconds - 0.05), durationSeconds * fraction)),
     );
 
