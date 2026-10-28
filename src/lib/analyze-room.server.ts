@@ -338,3 +338,18 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string)
     return { error: message };
   }
 }
+
+const PROCESS_MARKER = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
+
+export async function runUsageDiagnostic(address: string | null) {
+  let ok = false;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("analysis_usage").select("id", { head: true, count: "exact" });
+    ok = !error;
+  } catch {
+    ok = false;
+  }
+  const connectionFingerprint = address ? (await sha256Hex(`walkquote-diagnostic:${address}`)).slice(0, 24) : null;
+  return { ok, processMarker: PROCESS_MARKER, connectionFingerprint };
+}

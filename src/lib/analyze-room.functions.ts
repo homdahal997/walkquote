@@ -18,3 +18,10 @@ export const analyzeRoomFn = createServerFn({ method: "POST" })
     const result = await runAnalyzeRoom(data, address);
     return JSON.parse(JSON.stringify(result)) as Record<string, unknown>;
   });
+
+/** Server check shown in the contractor inbox: confirms the usage store is reachable. */
+export const analysisDiagnosticFn = createServerFn({ method: "POST" }).handler(async () => {
+  const { runUsageDiagnostic } = await import("./analyze-room.server");
+  const address = getRequestHeader("cf-connecting-ip") ?? getRequestHeader("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  return runUsageDiagnostic(address);
+});
