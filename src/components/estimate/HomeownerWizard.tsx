@@ -201,6 +201,8 @@ export function HomeownerWizard() {
   const [trimMask, setTrimMask] = useState<MaskData | null>(null);
   const [openingMask, setOpeningMask] = useState<MaskData | null>(null);
   const [maskUnavailable, setMaskUnavailable] = useState(false);
+  const [frameWallMasks, setFrameWallMasks] = useState<Array<MaskData | null>>([]);
+  const [samOpeningCounts, setSamOpeningCounts] = useState<{ doors: Array<number | null>; windows: Array<number | null> }>({ doors: [], windows: [] });
   const [analysisStatuses, setAnalysisStatuses] = useState<AnalysisStatus[]>(["pending", "pending", "pending", "pending"]);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(null);
@@ -764,6 +766,8 @@ export function HomeownerWizard() {
     setTrimMask(null);
     setOpeningMask(null);
     setMaskUnavailable(false);
+    setFrameWallMasks([]);
+    setSamOpeningCounts({ doors: [], windows: [] });
     setObservations([]);
     setAssessment({ visibleDoorCount: null, visibleWindowCount: null, visibleMarkCount: null, wallTone: "unknown", scaleReference: "none", suggestedDimensions: null, openingDeductionSqFt: null });
     setAnalysisStatuses(["pending", "pending", "pending", "pending"]);
@@ -834,6 +838,8 @@ export function HomeownerWizard() {
         scaleReference: suggested ? "standard_door" : "none",
         suggestedDimensions: suggested,
         openingDeductionSqFt: suggested ? clampArea(observationResult.openingDeductionSqFt) : null,
+        roomType: typeof observationResult.roomType === "string" ? observationResult.roomType : undefined,
+        visibleWallCount: clampCount(observationResult.visibleWallCount, 12),
       };
       setAssessment(nextAssessment);
       setAnalysisStep(1, "done");
@@ -857,6 +863,14 @@ export function HomeownerWizard() {
         setTrimMask(trim);
         setOpeningMask(openings);
         setMaskUnavailable(!wall);
+        const perFrame = Array.isArray(maskResult.frameMaskTexts)
+          ? await Promise.all(maskResult.frameMaskTexts.map((text) => decodeOptionalMask(text).catch(() => null)))
+          : [];
+        setFrameWallMasks(perFrame);
+        setSamOpeningCounts({
+          doors: Array.isArray(maskResult.samDoorCounts) ? maskResult.samDoorCounts : [],
+          windows: Array.isArray(maskResult.samWindowCounts) ? maskResult.samWindowCounts : [],
+        });
         if (!wall && !trim && !openings) throw new Error("segmentation-output-empty");
         setAnalysisStep(2, "done");
       } catch {
@@ -864,6 +878,8 @@ export function HomeownerWizard() {
         setTrimMask(null);
         setOpeningMask(null);
         setMaskUnavailable(true);
+        setFrameWallMasks([]);
+        setSamOpeningCounts({ doors: [], windows: [] });
         setAnalysisStep(2, "skipped");
       }
 
@@ -987,6 +1003,8 @@ export function HomeownerWizard() {
     setTrimMask(null);
     setOpeningMask(null);
     setMaskUnavailable(false);
+    setFrameWallMasks([]);
+    setSamOpeningCounts({ doors: [], windows: [] });
     setAnalysisStatuses(["pending", "pending", "pending", "pending"]);
     setAnalysisError("");
     setAnalysisErrorCode(null);
