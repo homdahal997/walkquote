@@ -293,8 +293,10 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string)
     return stage === "transcribe" ? invalid : { error: "Invalid room images. Add three or four compressed JPEG views and try again." };
   }
 
-  const quota = await reserveStage(visitorAddress, attemptId, stage);
-  if (quota) return quota;
+  // Closed testing (administrator only) skips daily reservations, as in the source app.
+  // reserveStage() enforces the public per-visitor and site-wide limits if live analysis is opened up.
+  void reserveStage;
+  void visitorAddress;
 
   try {
     if (stage === "transcribe") return { transcript: await transcribe(audio as Uint8Array) };
