@@ -279,7 +279,12 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
   }
 }
 
-const PROCESS_MARKER = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
+// Generated lazily: the Worker runtime forbids random values in global scope.
+let processMarker: string | null = null;
+function getProcessMarker() {
+  processMarker ??= Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
+  return processMarker;
+}
 
 export async function runUsageDiagnostic(address: string | null) {
   let ok = false;
@@ -291,5 +296,5 @@ export async function runUsageDiagnostic(address: string | null) {
     ok = false;
   }
   const connectionFingerprint = address ? (await sha256Hex(`walkquote-diagnostic:${address}`)).slice(0, 24) : null;
-  return { ok, processMarker: PROCESS_MARKER, connectionFingerprint };
+  return { ok, processMarker: getProcessMarker(), connectionFingerprint };
 }
