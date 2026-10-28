@@ -151,7 +151,7 @@ function ExperienceModeSwitch({
 
 
 export function HomeownerWizard() {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotion() ?? false;
   const location = useLocation();
   const [screen, setScreen] = useState<Screen>("setup");
   const [mode, setMode] = useState<"homeowner" | "demo">("homeowner");
