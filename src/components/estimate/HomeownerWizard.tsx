@@ -122,14 +122,14 @@ function ExperienceModeSwitch({
         <button
           type="button"
           aria-label="Explore Interactive Demo"
-          aria-pressed={mode === "demo"}
+          aria-pressed={(mode as string) === "demo"}
           disabled={disabled}
           onClick={() => onSelect("demo")}
-          className={`group flex min-h-[84px] w-full items-center gap-3 rounded-2xl border border-slate-950 bg-slate-950 px-4 py-3 text-left text-white shadow-md transition duration-200 hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 disabled:cursor-not-allowed disabled:opacity-60 ${mode === "demo" ? "ring-2 ring-amber-300/50" : ""}`}
+          className={`group flex min-h-[84px] w-full items-center gap-3 rounded-2xl border border-slate-950 bg-slate-950 px-4 py-3 text-left text-white shadow-md transition duration-200 hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 disabled:cursor-not-allowed disabled:opacity-60 ${(mode as string) === "demo" ? "ring-2 ring-amber-300/50" : ""}`}
         >
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-300 text-slate-950 transition group-hover:bg-amber-200"><Sparkles size={20} /></span>
           <span className="min-w-0 flex-1"><strong className="block text-base font-bold text-white">Explore Interactive Demo</strong><span className="mt-0.5 block text-sm leading-5 text-slate-300">Prepared room with illustrative masks, scale math, color preview and budget matching.</span></span>
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${mode === "demo" ? "bg-amber-300 text-slate-950" : "bg-white/10 text-amber-200"}`}>{mode === "demo" ? "ACTIVE" : "DEMO"}</span>
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${(mode as string) === "demo" ? "bg-amber-300 text-slate-950" : "bg-white/10 text-amber-200"}`}>{(mode as string) === "demo" ? "ACTIVE" : "DEMO"}</span>
         </button>
         <button
           type="button"
@@ -249,17 +249,17 @@ export function HomeownerWizard() {
   const resetFlowRef = useRef<(nextMode: "homeowner" | "demo") => void>(() => undefined);
   const demoHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const focusDemoHeading = () => {
-    if (mode === "demo") demoHeadingRef.current?.focus();
+    if ((mode as string) === "demo") demoHeadingRef.current?.focus();
   };
 
-  const sampleRoom = mode === "demo" ? ROOMS[sampleRoomId] : null;
+  const sampleRoom = (mode as string) === "demo" ? ROOMS[sampleRoomId] : null;
   const dimensions: RoomDimensions | null = useMemo(() => {
     const draftArea = wallAreaEditing && wallAreaDraft.trim() ? Number(wallAreaDraft) : Number.NaN;
     const activeWallAreaOverride = Number.isFinite(draftArea) && draftArea >= 1 && draftArea <= 10_000
       ? draftArea
       : manualWallAreaOverride;
 
-    if (mode === "demo") {
+    if ((mode as string) === "demo") {
       const room = ROOMS[sampleRoomId];
       return {
         roomShape: "rectangular",
@@ -347,7 +347,7 @@ export function HomeownerWizard() {
   }, [mode, sampleRoomId, roomShape, measurementFields, doorScopeSelected, patchScopeSelected, estimateSource, assessment.scaleReference, assessment.openingDeductionSqFt, manualWallAreaOverride, wallAreaEditing, wallAreaDraft]);
 
   const items = useMemo(
-    () => dimensions ? buildScopeLines(dimensions, color, mode === "demo" && sampleRoom?.darkWalls ? "dark" : assessment.wallTone, transcript, mode) : [],
+    () => dimensions ? buildScopeLines(dimensions, color, (mode as string) === "demo" && sampleRoom?.darkWalls ? "dark" : assessment.wallTone, transcript, mode) : [],
     [dimensions, color, mode, sampleRoom, assessment.wallTone, transcript],
   );
   const totals = useMemo(() => calculateTotals(items, scopeSelection), [items, scopeSelection]);
@@ -358,14 +358,14 @@ export function HomeownerWizard() {
   const activeRoomFrames = captureMode === "video" ? videoFrames : photoAssets;
   const primaryFrameIndex = activeRoomFrames.length > 0 ? Math.floor((activeRoomFrames.length - 1) / 2) : 0;
   const primaryFrame = activeRoomFrames[primaryFrameIndex] ?? null;
-  const primaryImageUrl = mode === "demo" ? sampleRoom?.image ?? "" : primaryFrame?.previewUrl ?? "";
-  const primaryImageAlt = mode === "demo" ? sampleRoom?.alt ?? "Generated demo room" : "A representative frame from the homeowner's room walkthrough";
-  const captureIsReady = mode === "demo"
+  const primaryImageUrl = (mode as string) === "demo" ? sampleRoom?.image ?? "" : primaryFrame?.previewUrl ?? "";
+  const primaryImageAlt = (mode as string) === "demo" ? sampleRoom?.alt ?? "Generated demo room" : "A representative frame from the homeowner's room walkthrough";
+  const captureIsReady = (mode as string) === "demo"
     ? true
     : captureMode === "video"
       ? Boolean(videoAsset && videoFrames.length === 4)
       : photoAssets.length >= MIN_ROOM_PHOTOS && photoAssets.length <= MAX_ROOM_PHOTOS;
-  const activeJourneyStep = mode === "demo"
+  const activeJourneyStep = (mode as string) === "demo"
     ? screen === "estimate" ? 3 : 2
     : screen === "setup" ? 1 : screen === "capture" ? 2 : screen === "analysis" || screen === "measurements" ? 3 : screen === "estimate" ? 4 : 5;
   const compactMobileStep = mode === "homeowner" && (screen === "capture" || screen === "analysis");
@@ -754,7 +754,7 @@ export function HomeownerWizard() {
     if (analysisBusyRef.current) return;
 
     const attemptId = crypto.randomUUID();
-    const sourceId: AnalysisSourceId = mode === "demo" ? sampleRoomId : "homeowner";
+    const sourceId: AnalysisSourceId = (mode as string) === "demo" ? sampleRoomId : "homeowner";
     analysisBusyRef.current = true;
     setAnalysisBusy(true);
     setAnalysisError("");
@@ -768,7 +768,7 @@ export function HomeownerWizard() {
     setAnalysisStatuses(["pending", "pending", "pending", "pending"]);
     setScreen("analysis");
 
-    let noteForAnalysis = mode === "demo" ? ROOMS[sampleRoomId].spokenCue : cleanRoomNote(scopeNote);
+    let noteForAnalysis = (mode as string) === "demo" ? ROOMS[sampleRoomId].spokenCue : cleanRoomNote(scopeNote);
     let frameDataUrls: string[] = [];
     let activeStep = 0;
 
@@ -865,7 +865,7 @@ export function HomeownerWizard() {
       setWallAreaEditing(false);
       setWallAreaDraft("");
       setWallAreaEditError("");
-      if (mode === "demo") {
+      if ((mode as string) === "demo") {
         const room = ROOMS[sampleRoomId];
         setEstimateSource("demo");
         setRoomShape("rectangular");
@@ -902,7 +902,7 @@ export function HomeownerWizard() {
       }
       setMeasurementError("");
       setScopeSelection({});
-      setScreen(mode === "demo" ? "measurements" : suggested ? "estimate" : "measurements");
+      setScreen((mode as string) === "demo" ? "measurements" : suggested ? "estimate" : "measurements");
     } catch (caught) {
       const stageError = caught instanceof AnalysisStageError ? caught : null;
       setAnalysisStep(activeStep, "error");
@@ -1160,7 +1160,7 @@ export function HomeownerWizard() {
 
   const backFromEstimate = () => {
     if (wallAreaEditing && !saveWallAreaEdit()) return;
-    setScreen(mode === "demo" ? "demo-inspector" : estimateSource === "doorway_scale" ? "capture" : "measurements");
+    setScreen((mode as string) === "demo" ? "demo-inspector" : estimateSource === "doorway_scale" ? "capture" : "measurements");
   };
 
   const setDemoDimensions = () => {
@@ -1213,7 +1213,7 @@ export function HomeownerWizard() {
     const selectedScope = includedItems.map((item) => item.id);
     const finalTotals = calculateTotals(items, scopeSelection);
     const homeownerWallAreaOnly = mode === "homeowner" && estimateSource === "homeowner_entered_net_wall_area";
-    const assumptions = mode === "demo"
+    const assumptions = (mode as string) === "demo"
       ? [
           "Sample room quantities are illustrative and are not homeowner measurements.",
           "The generated image and visible clues are demo material only.",
@@ -1274,8 +1274,8 @@ export function HomeownerWizard() {
         phone,
         tags: ["walkquote", "estimate"],
         contact_stage: "lead",
-        source: mode === "demo" ? "WalkQuote demo estimate" : "WalkQuote homeowner estimate",
-        append_notes: `Requested a ${mode === "demo" ? "sample" : captureMode} interior painting and minor drywall estimate. Budget: ${budgetAmount === null ? "show market price" : budgetLabel}.`,
+        source: (mode as string) === "demo" ? "WalkQuote demo estimate" : "WalkQuote homeowner estimate",
+        append_notes: `Requested a ${(mode as string) === "demo" ? "sample" : captureMode} interior painting and minor drywall estimate. Budget: ${budgetAmount === null ? "show market price" : budgetLabel}.`,
       }) as {
         id?: string;
         contact_id?: string;
@@ -1286,16 +1286,16 @@ export function HomeownerWizard() {
 
       await RoomEstimate.create({
         estimate_mode: mode,
-        capture_mode: mode === "demo" ? "demo" : captureMode,
-        ...(mode === "demo" ? { sample_room: sampleRoomId } : {}),
-        sample_dimensions: mode === "demo" ? ROOMS[sampleRoomId].dimensions : roomDimensionsLabel(dimensions),
-        ...(mode === "demo" ? { room_shape: "rectangular" as const } : homeownerWallAreaOnly ? {} : { room_shape: roomShape }),
+        capture_mode: (mode as string) === "demo" ? "demo" : captureMode,
+        ...((mode as string) === "demo" ? { sample_room: sampleRoomId } : {}),
+        sample_dimensions: (mode as string) === "demo" ? ROOMS[sampleRoomId].dimensions : roomDimensionsLabel(dimensions),
+        ...((mode as string) === "demo" ? { room_shape: "rectangular" as const } : homeownerWallAreaOnly ? {} : { room_shape: roomShape }),
         ...(typeof dimensions.perimeterFt === "number" ? { room_perimeter_ft: dimensions.perimeterFt } : {}),
         media_storage_mode: mode === "homeowner" ? "protected_chunk_records" : "demo_only",
-        media_kind: mode === "demo" ? "demo" : captureMode,
+        media_kind: (mode as string) === "demo" ? "demo" : captureMode,
         ...(mediaManifest ? { media_manifest: mediaManifest } : {}),
         ...(mode === "homeowner" ? { primary_frame_index: primaryFrameIndex } : {}),
-        media_references: mode === "demo" ? [] : ["media_manifest"],
+        media_references: (mode as string) === "demo" ? [] : ["media_manifest"],
         analysis_consent: mode === "homeowner" ? analysisConsent : false,
         media_share_consent: mediaShareConsent,
         media_consent_at: consentTimestamp,
@@ -1304,10 +1304,10 @@ export function HomeownerWizard() {
         visible_door_count: assessment.visibleDoorCount ?? 0,
         visible_window_count: assessment.visibleWindowCount ?? 0,
         visible_mark_count: assessment.visibleMarkCount ?? 0,
-        wall_tone: mode === "demo" ? (sampleRoom?.darkWalls ? "dark" : "light") : assessment.wallTone,
-        scale_reference: mode === "demo" ? "illustrative_demo" : estimateSource === "doorway_scale" ? "standard_door_80in_approx" : "none",
-        measurement_source: mode === "demo" ? "sample_preset" : estimateSource,
-        measurement_confidence: mode === "demo"
+        wall_tone: (mode as string) === "demo" ? (sampleRoom?.darkWalls ? "dark" : "light") : assessment.wallTone,
+        scale_reference: (mode as string) === "demo" ? "illustrative_demo" : estimateSource === "doorway_scale" ? "standard_door_80in_approx" : "none",
+        measurement_source: (mode as string) === "demo" ? "sample_preset" : estimateSource,
+        measurement_confidence: (mode as string) === "demo"
           ? "Illustrative sample quantities from a generated demo room."
           : estimateSource === "doorway_scale"
             ? "Low-confidence visual estimate using an apparently standard 80-inch interior doorway as a rough scale reference; contractor review needed."
@@ -1630,10 +1630,10 @@ export function HomeownerWizard() {
 
   return (
     <div className={`wq-app min-h-screen ${compactMobileStep ? "max-sm:!bg-slate-50 max-sm:!bg-none" : ""}`}>
-      <HeroHeader brandMark={BRAND_MARK} demo={mode === "demo"} compact={compactMobileStep} landing={screen === "setup"} />
+      <HeroHeader brandMark={BRAND_MARK} demo={(mode as string) === "demo"} compact={compactMobileStep} landing={screen === "setup"} />
       <main className={`wq-main pt-5 sm:pt-8 ${compactMobileStep || screen === "setup" ? "max-sm:pt-3" : ""} ${mode === "homeowner" && screen === "estimate" ? "wq-estimate-bar-clearance" : ""}`}>
         {screen === "setup" && mode === "homeowner" ? null : <ExperienceModeSwitch mode={mode} disabled={modeSwitchDisabled} onSelect={(nextMode) => { if (nextMode !== mode) resetFlow(nextMode); }} />}
-        <JourneyProgress active={activeJourneyStep} demo={mode === "demo"} />
+        <JourneyProgress active={activeJourneyStep} demo={(mode as string) === "demo"} />
         <AnimatePresence mode="wait">
           {screen === "setup" && renderSetup()}
           {screen === "demo-inspector" && renderDemoInspector()}

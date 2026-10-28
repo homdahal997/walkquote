@@ -16,7 +16,8 @@ export const analyzeRoomFn = createServerFn({ method: "POST" })
       getRequestHeader("x-forwarded-for")?.split(",")[0]?.trim() ??
       "unknown";
     const result = await runAnalyzeRoom(data, address);
-    return JSON.parse(JSON.stringify(result)) as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return JSON.parse(JSON.stringify(result)) as any;
   });
 
 /** Server check shown in the contractor inbox: confirms the usage store is reachable. */
