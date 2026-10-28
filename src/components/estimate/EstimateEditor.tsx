@@ -87,6 +87,7 @@ export interface EstimateEditorState {
   transcript: string;
   observations: string[];
   assessment: RoomAssessment;
+  onAdjustCount?: (key: "visibleDoorCount" | "visibleWindowCount", delta: number) => void;
   estimateSource: EstimateSource;
   manualWallAreaOverride: number | null;
   wallAreaEditing: boolean;
@@ -323,6 +324,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
     transcript,
     observations,
     assessment,
+    onAdjustCount,
     estimateSource,
     manualWallAreaOverride,
     wallAreaEditing,
@@ -462,11 +464,11 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
               <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-950"><DoorOpen size={19} className="text-teal-800" /> Visible features</h3>
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-xl bg-slate-50 p-3"><dt className="text-slate-500">Doors seen</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">{assessment.visibleDoorCount ?? "Not clear"}</dd></div>
-                  <div className="rounded-xl bg-slate-50 p-3"><dt className="text-slate-500">Windows seen</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">{assessment.visibleWindowCount ?? "Not clear"}</dd></div>
+                  <div className="rounded-xl bg-slate-50 p-3"><dt className="text-slate-500">Doors seen</dt><dd className="mt-1 flex items-center gap-2 text-lg font-semibold tabular-nums text-slate-950"><button type="button" aria-label="Fewer doors" onClick={() => onAdjustCount?.("visibleDoorCount", -1)} className="h-9 w-9 rounded-lg border border-slate-300 bg-white">−</button><span className="min-w-6 text-center">{assessment.visibleDoorCount ?? 0}</span><button type="button" aria-label="More doors" onClick={() => onAdjustCount?.("visibleDoorCount", 1)} className="h-9 w-9 rounded-lg border border-slate-300 bg-white">+</button></dd></div>
+                  <div className="rounded-xl bg-slate-50 p-3"><dt className="text-slate-500">Windows seen</dt><dd className="mt-1 flex items-center gap-2 text-lg font-semibold tabular-nums text-slate-950"><button type="button" aria-label="Fewer windows" onClick={() => onAdjustCount?.("visibleWindowCount", -1)} className="h-9 w-9 rounded-lg border border-slate-300 bg-white">−</button><span className="min-w-6 text-center">{assessment.visibleWindowCount ?? 0}</span><button type="button" aria-label="More windows" onClick={() => onAdjustCount?.("visibleWindowCount", 1)} className="h-9 w-9 rounded-lg border border-slate-300 bg-white">+</button></dd></div>
                   <div className="col-span-2 rounded-xl bg-slate-50 p-3"><dt className="text-slate-500">Surface marks to inspect</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">{assessment.visibleMarkCount ?? "Not clear"}</dd></div>
                 </dl>
-                <p className="mt-4 text-sm leading-6 text-slate-600">These are visual observations only. WalkQuote does not diagnose stains, moisture, lead, mold, or structural problems.</p>
+                <p className="mt-4 text-sm leading-6 text-slate-600">Tap − or + to fix a count; the door and window deduction updates automatically. These are visual observations only. WalkQuote does not diagnose stains, moisture, lead, mold, or structural problems.</p>
               </div>
             </aside>
           </div>
