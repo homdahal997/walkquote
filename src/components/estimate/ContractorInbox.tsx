@@ -308,7 +308,7 @@ export function ContractorInbox() {
       <main className="wq-main inbox-main pt-6 sm:pt-10">
         <div className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-teal-800"><span className="h-px w-8 bg-teal-700" /> Demo Painting Co. · request desk</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Room estimate inbox</h1><p className="mt-2 max-w-2xl text-base leading-6 text-slate-600">Review homeowner media, approximate room quantities, scope, budget match, and color choices before arranging a site review.</p></div>
-          {access === "ready" && <div className="flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />{adminEmail}<button type="button" onClick={() => void logout()} className="rounded-lg border border-slate-300 px-3 py-2 font-semibold hover:bg-slate-50">Sign out</button></div>}
+          {access === "ready" && <div className="flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />{adminEmail}{!isDemo && <button type="button" onClick={() => void logout()} className="rounded-lg border border-slate-300 px-3 py-2 font-semibold hover:bg-slate-50">Sign out</button>}</div>}
         </div>
 
         {isDemo && <div className="mt-6 flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 sm:flex-row sm:items-center sm:justify-between"><span><strong>Demo mode.</strong> These are illustrative sample leads; no real homeowner data is shown or saved.</span><Link to="/contractor" className="font-semibold underline">Open the real inbox</Link></div>}
@@ -329,7 +329,7 @@ export function ContractorInbox() {
             <div className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3 sm:p-5">
               <div><span className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Requests loaded</span><strong className="mt-1 block text-xl tabular-nums text-slate-950">{leads.length.toString().padStart(2, "0")}</strong></div>
               <div><span className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Estimate category</span><strong className="mt-1 block text-base text-slate-950">Interior paint + minor drywall</strong></div>
-              <div className="flex items-center sm:justify-end"><button type="button" onClick={() => void loadLeads()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><RefreshCw size={15} /> Refresh inbox</button></div>
+              <div className="flex items-center sm:justify-end"><button type="button" onClick={() => { if (isDemo) { setLeads(SAMPLE_LEADS); return; } void loadLeads(); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><RefreshCw size={15} /> Refresh inbox</button></div>
             </div>
 
             {leads.length === 0 ? (
