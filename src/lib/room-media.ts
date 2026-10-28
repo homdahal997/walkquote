@@ -501,10 +501,19 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
 
 export async function audioBlobToWavBase64(blob: Blob): Promise<string> {
   if (blob.size === 0 || blob.size > 3_000_000) throw new Error("audio-size-invalid");
-  const context = new AudioContext();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const AudioCtor: typeof AudioContext = window.AudioContext ?? (window as any).webkitAudioContext;
+  if (!AudioCtor) throw new Error("audio-decoder-unavailable");
+  const context = new AudioCtor();
   let decoded: AudioBuffer;
   try {
-    decoded = await context.decodeAudioData(await blob.arrayBuffer());
+    if (context.state === "suspended") await context.resume().catch(() => undefined);
+    const bytes = await blob.arrayBuffer();
+    // Older WebKit only supports the callback form of decodeAudioData.
+    decoded = await new Promise<AudioBuffer>((resolve, reject) => {
+      const maybe = context.decodeAudioData(bytes, resolve, reject);
+      if (maybe && typeof (maybe as Promise<AudioBuffer>).then === "function") (maybe as Promise<AudioBuffer>).then(resolve, reject);
+    });
   } catch {
     throw new Error("audio-decode-failed");
   } finally {
