@@ -69,6 +69,7 @@ import {
   hasOptionalScopeCue,
   hasPatchScopeCue,
   ROOMS,
+  roomDimensionsLabel,
   VIDEO_CARD_IMAGE,
 } from "@/lib/walkquote-estimate";
 import type {

@@ -8,9 +8,15 @@ import { AuthFrame } from "@/components/auth/Login";
 import { resetPassword } from "@/lib/auth-pages";
 
 const ResetPassword = () => {
-  const location = useLocation();
   const navigate = useNavigate();
-  const token = new URLSearchParams(location.searchStr).get("token");
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) setToken("session");
+    });
+    void supabase.auth.getSession().then(({ data }) => { if (data.session) setToken("session"); });
+    return () => listener.subscription.unsubscribe();
+  }, []);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
