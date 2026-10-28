@@ -1,0 +1,72 @@
+[
+ {
+  "capability": "code",
+  "source": "Buildy (Vite + React Router + Superdev SDK)",
+  "outcome": "migrate",
+  "status": "verified",
+  "next_action": "Pages render with no console errors"
+ },
+ {
+  "capability": "schema",
+  "source": "entities/RoomEstimate.json, RoomEstimateMediaChunk.json",
+  "outcome": "migrate",
+  "status": "verified",
+  "next_action": ""
+ },
+ {
+  "capability": "records",
+  "source": "Superdev entity store",
+  "outcome": "migrate",
+  "status": "pending",
+  "next_action": "Request CSV/JSON export of RoomEstimate records"
+ },
+ {
+  "capability": "auth identities",
+  "source": "Superdev app auth (email/password, administrator role)",
+  "outcome": "migrate",
+  "status": "pending",
+  "next_action": "No admin yet: owner signs up, then grant admin role; request old user export"
+ },
+ {
+  "capability": "authorization",
+  "source": "anon create, admin read/update/delete",
+  "outcome": "migrate",
+  "status": "verified",
+  "next_action": "Visitor insert OK, visitor read blocked"
+ },
+ {
+  "capability": "room AI analysis",
+  "source": "functions/analyze-room.ts calling api.meta.ai (muse/sam) + @meta-sam/parser",
+  "outcome": "replace with Lovable AI Gateway (provider endpoint 404, parser package not published)",
+  "status": "verified",
+  "next_action": "Observe + segment tested on sample room; transcription endpoint responds (not tested with real speech)"
+ },
+ {
+  "capability": "usage quotas",
+  "source": "Deno KV",
+  "outcome": "replace with Cloud table",
+  "status": "done",
+  "next_action": "Kept but skipped while analysis is admin-only, as in source"
+ },
+ {
+  "capability": "CRM contacts",
+  "source": "superdev integrations.core.contacts",
+  "outcome": "replace: contact stored on estimate row",
+  "status": "done",
+  "next_action": ""
+ },
+ {
+  "capability": "branding badge / buildy preview script",
+  "source": "platform metadata",
+  "outcome": "drop",
+  "status": "done",
+  "next_action": ""
+ },
+ {
+  "capability": "verification",
+  "source": "",
+  "outcome": "",
+  "status": "partial",
+  "next_action": "Admin sign-in and inbox not exercised: no admin account exists yet"
+ }
+]
