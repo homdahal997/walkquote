@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
@@ -35,6 +35,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import type { EstimateLead, UsageDiagnosticReply } from "@/types/estimate";
 import { PageFooter } from "@/components/estimate/JourneyNav";
+import { SAMPLE_LEADS } from "@/lib/sample-leads";
 
 const USAGE_DIAGNOSTIC_FIELDS = ["id", "created_at", "status"] as const;
 const INBOX_LIST_FIELDS = [
@@ -134,6 +135,7 @@ function StoredAudio({ base64, mimeType }: { base64: string; mimeType?: string }
 
 export function ContractorInbox() {
   const navigate = useNavigate();
+  const isDemo = useLocation({ select: (location) => new URLSearchParams(location.searchStr).get("view") === "demo" });
   const reduceMotion = useReducedMotion();
   const [access, setAccess] = useState<"checking" | "signed-out" | "not-admin" | "loading" | "ready" | "error">("checking");
   const [leads, setLeads] = useState<EstimateLead[]>([]);
@@ -174,6 +176,14 @@ export function ContractorInbox() {
   useEffect(() => {
     let active = true;
     const verifyAdmin = async () => {
+      if (isDemo) {
+        setAdminEmail("Demo mode · sample leads");
+        setLeads(SAMPLE_LEADS);
+        setLeadDetails(Object.fromEntries(SAMPLE_LEADS.map((lead) => [lead.id, lead])));
+        setAccess("ready");
+        return;
+      }
+      setAccess("checking");
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!active) return;
@@ -195,7 +205,7 @@ export function ContractorInbox() {
     };
     void verifyAdmin();
     return () => { active = false; };
-  }, [loadLeads]);
+  }, [loadLeads, isDemo]);
 
   const releaseLeadMediaUrls = (leadId: string) => {
     const urls = privateMediaUrlsRef.current.get(leadId) ?? [];
@@ -292,7 +302,7 @@ export function ContractorInbox() {
       <header className="wq-header">
         <div className="wq-header-inner">
           <Link to="/" className="wq-brand" aria-label="WalkQuote home"><img className="wq-brand-mark" src={BRAND_MARK} alt="" /><span className="wq-brand-lockup"><span className="wq-brand-name">WalkQuote</span><span className="wq-brand-subtitle">Demo Painting Co. inbox</span></span></Link>
-          <div className="wq-header-right"><span className="wq-demo-status"><LockKeyhole size={13} /> ADMIN-ONLY INBOX</span><Link className="wq-header-link" to="/">Homeowner estimate <ArrowUpRight size={15} /></Link></div>
+          <div className="wq-header-right"><span className="wq-demo-status"><LockKeyhole size={13} /> {isDemo ? "DEMO INBOX · SAMPLE LEADS" : "ADMIN-ONLY INBOX"}</span><Link className="wq-header-link" to="/">Homeowner estimate <ArrowUpRight size={15} /></Link></div>
         </div>
       </header>
       <main className="wq-main inbox-main pt-6 sm:pt-10">
