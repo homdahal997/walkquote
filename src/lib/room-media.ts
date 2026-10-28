@@ -280,9 +280,79 @@ export function beginVideoWalkthrough(stream: MediaStream, previewVideo?: HTMLVi
   return { result, stop };
 }
 
+function encodeWav(chunks: Float32Array[], inputRate: number): Blob {
+  const total = chunks.reduce((sum, c) => sum + c.length, 0);
+  const mono = new Float32Array(total);
+  let offset = 0;
+  for (const c of chunks) { mono.set(c, offset); offset += c.length; }
+  const outputRate = 24_000;
+  const ratio = inputRate / outputRate;
+  const outLength = Math.max(1, Math.floor(total / ratio));
+  const buffer = new ArrayBuffer(44 + outLength * 2);
+  const view = new DataView(buffer);
+  const text = (o: number, s: string) => { for (let i = 0; i < s.length; i += 1) view.setUint8(o + i, s.charCodeAt(i)); };
+  text(0, "RIFF"); view.setUint32(4, 36 + outLength * 2, true); text(8, "WAVE"); text(12, "fmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, outputRate, true); view.setUint32(28, outputRate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true); text(36, "data"); view.setUint32(40, outLength * 2, true);
+  for (let i = 0; i < outLength; i += 1) {
+    const s = Math.max(-1, Math.min(1, mono[Math.min(total - 1, Math.floor(i * ratio))] ?? 0));
+    view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+/** Records the microphone straight to 24 kHz mono WAV via Web Audio, so no decoding is needed later (works on iOS Safari). */
+function beginPcmCapture(stream: MediaStream): RecordingSession<Blob> | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Ctor: typeof AudioContext | undefined = (window as any).AudioContext ?? (window as any).webkitAudioContext;
+  if (!Ctor) return null;
+  const context = new Ctor();
+  if (typeof context.createScriptProcessor !== "function") { void context.close(); return null; }
+  void context.resume().catch(() => undefined);
+  const source = context.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+  const processor = context.createScriptProcessor(4096, 1, 1);
+  const sink = context.createGain();
+  sink.gain.value = 0;
+  const chunks: Float32Array[] = [];
+  let stopped = false;
+  // Cap at 15 s so the 24 kHz WAV stays under the note size limit.
+  let samples = 0;
+  const maxSamples = context.sampleRate * 15;
+  processor.onaudioprocess = (event) => {
+    if (stopped) return;
+    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    samples += event.inputBuffer.length;
+    if (samples >= maxSamples) session.stop();
+  };
+  source.connect(processor); processor.connect(sink); sink.connect(context.destination);
+  let resolveBlob: (b: Blob) => void = () => undefined;
+  let rejectBlob: (e: Error) => void = () => undefined;
+  const result = new Promise<Blob>((res, rej) => { resolveBlob = res; rejectBlob = rej; });
+  const session = {
+    result,
+    stop: () => {
+      if (stopped) return;
+      stopped = true;
+      const rate = context.sampleRate;
+      try { source.disconnect(); processor.disconnect(); sink.disconnect(); } catch { /* already disconnected */ }
+      void context.close().catch(() => undefined);
+      if (!chunks.length) { rejectBlob(new Error("recording-empty")); return; }
+      resolveBlob(encodeWav(chunks, rate));
+    },
+  };
+  return session;
+}
+
 export function beginAudioNoteCapture(stream: MediaStream): RecordingSession<Blob> {
-  if (typeof MediaRecorder === "undefined") throw new Error("recording-unavailable");
   if (!stream.getAudioTracks().length) throw new Error("microphone-required");
+  try {
+    const pcm = beginPcmCapture(stream);
+    if (pcm) return pcm;
+  } catch {
+    // Fall back to MediaRecorder below.
+  }
+  if (typeof MediaRecorder === "undefined") throw new Error("recording-unavailable");
   const audioStream = new MediaStream(stream.getAudioTracks());
   const recorder = createRecorder(
     audioStream,
@@ -501,6 +571,8 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
 
 export async function audioBlobToWavBase64(blob: Blob): Promise<string> {
   if (blob.size === 0 || blob.size > 3_000_000) throw new Error("audio-size-invalid");
+  // Notes recorded as raw PCM are already WAV; no browser decoding needed (avoids iOS decode failures).
+  if (blob.type === "audio/wav") return blobToBase64(blob);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const AudioCtor: typeof AudioContext = window.AudioContext ?? (window as any).webkitAudioContext;
   if (!AudioCtor) throw new Error("audio-decoder-unavailable");
