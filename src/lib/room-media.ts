@@ -315,13 +315,21 @@ function beginPcmCapture(stream: MediaStream): RecordingSession<Blob> | null {
   const sink = context.createGain();
   sink.gain.value = 0;
   const chunks: Float32Array[] = [];
-  processor.onaudioprocess = (event) => { chunks.push(new Float32Array(event.inputBuffer.getChannelData(0))); };
+  let stopped = false;
+  // Cap at 15 s so the 24 kHz WAV stays under the note size limit.
+  let samples = 0;
+  const maxSamples = context.sampleRate * 15;
+  processor.onaudioprocess = (event) => {
+    if (stopped) return;
+    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    samples += event.inputBuffer.length;
+    if (samples >= maxSamples) session.stop();
+  };
   source.connect(processor); processor.connect(sink); sink.connect(context.destination);
   let resolveBlob: (b: Blob) => void = () => undefined;
   let rejectBlob: (e: Error) => void = () => undefined;
   const result = new Promise<Blob>((res, rej) => { resolveBlob = res; rejectBlob = rej; });
-  let stopped = false;
-  return {
+  const session = {
     result,
     stop: () => {
       if (stopped) return;
@@ -333,6 +341,7 @@ function beginPcmCapture(stream: MediaStream): RecordingSession<Blob> | null {
       resolveBlob(encodeWav(chunks, rate));
     },
   };
+  return session;
 }
 
 export function beginAudioNoteCapture(stream: MediaStream): RecordingSession<Blob> {
