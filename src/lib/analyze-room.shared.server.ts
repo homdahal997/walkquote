@@ -16,7 +16,7 @@ const MAX_SEGMENTATION_BUNDLE_CHARS = 4_000_000;
 // SAM 3.1 concept prompts must be short noun phrases, one concept per request (Meta docs);
 // long instructions return zero matches. Each surface lists the concepts merged into its mask.
 const SURFACE_PROMPTS = {
-  walls: ["painted wall"],
+  walls: ["interior wall", "wall", "painted wall"],
   trim: ["baseboard", "door frame"],
   openings: ["door", "window"],
 } as const;

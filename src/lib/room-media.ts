@@ -1,6 +1,8 @@
 export const MAX_CAPTURED_VIDEO_SECONDS = 60;
 export const TARGET_CAPTURED_VIDEO_SECONDS = 30;
 export const MAX_VIDEO_CAPTURE_BYTES = 2_300_000;
+export const MAX_UPLOADED_VIDEO_BYTES = 120_000_000;
+export const MAX_UPLOADED_VIDEO_SECONDS = 180;
 
 const VIDEO_CAPTURE_MAX_DIMENSION = 720;
 const VIDEO_CAPTURE_FRAME_RATE = 12;
@@ -488,11 +490,12 @@ export function selectDistinctKeyframes(candidates: KeyframeCandidate[], count: 
 export async function extractRepresentativeFrames(
   videoBlob: Blob,
   recordedDurationSeconds?: number,
+  limits: { maxBytes: number; maxSeconds: number } = { maxBytes: MAX_VIDEO_CAPTURE_BYTES, maxSeconds: MAX_CAPTURED_VIDEO_SECONDS },
 ): Promise<{
   frames: RoomFrame[];
   durationSeconds: number;
 }> {
-  if (videoBlob.size === 0 || videoBlob.size > MAX_VIDEO_CAPTURE_BYTES) {
+  if (videoBlob.size === 0 || videoBlob.size > limits.maxBytes) {
     throw new Error("video-size-invalid");
   }
 
@@ -537,10 +540,10 @@ export async function extractRepresentativeFrames(
       ? recordedDurationSeconds
       : null;
     const measuredDuration = timerDuration ?? metadataDuration ?? seekableDuration;
-    if (measuredDuration === null || measuredDuration > MAX_CAPTURED_VIDEO_SECONDS) {
+    if (measuredDuration === null || measuredDuration > limits.maxSeconds) {
       throw new Error("video-duration-invalid");
     }
-    const durationSeconds = Math.min(MAX_CAPTURED_VIDEO_SECONDS, measuredDuration);
+    const durationSeconds = Math.min(limits.maxSeconds, measuredDuration);
 
     const seekTo = (timestampSeconds: number) => new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -642,7 +645,7 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 export async function audioBlobToWavBase64(blob: Blob): Promise<string> {
-  if (blob.size === 0 || blob.size > 3_000_000) throw new Error("audio-size-invalid");
+  if (blob.size === 0 || blob.size > MAX_UPLOADED_VIDEO_BYTES) throw new Error("audio-size-invalid");
   // Notes recorded as raw PCM are already WAV; no browser decoding needed (avoids iOS decode failures).
   if (blob.type === "audio/wav") return blobToBase64(blob);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -664,12 +667,13 @@ export async function audioBlobToWavBase64(blob: Blob): Promise<string> {
     await context.close().catch(() => undefined);
   }
 
-  if (decoded.duration <= 0 || decoded.duration > MAX_CAPTURED_VIDEO_SECONDS) {
+  if (decoded.duration <= 0) {
     throw new Error("audio-duration-invalid");
   }
 
+  // Longer uploaded videos send only their first minute of audio for transcription.
   const outputRate = 24_000;
-  const outputLength = Math.ceil(decoded.duration * outputRate);
+  const outputLength = Math.ceil(Math.min(decoded.duration, MAX_CAPTURED_VIDEO_SECONDS) * outputRate);
   const mono = new Float32Array(decoded.length);
   for (let channel = 0; channel < decoded.numberOfChannels; channel += 1) {
     const channelData = decoded.getChannelData(channel);

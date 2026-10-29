@@ -68,7 +68,7 @@ const Login = () => {
       description="Sign in with the project administrator account to review Demo Painting Co. estimate requests."
     >
       <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
-        <Link to="/" search={{ experience: "demo" }} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-amber-300 px-4 py-3 text-center text-base font-bold leading-5 text-slate-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">Or skip sign-in and explore the Interactive Demo →</Link>
+        <Link to="/walkthrough" search={{ experience: "demo" }} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-amber-300 px-4 py-3 text-center text-base font-bold leading-5 text-slate-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">Or skip sign-in and explore the Interactive Demo →</Link>
         <p className="mt-2 text-sm leading-5 text-amber-950">The prepared sample opens without an account and stays separate from real room requests.</p>
       </div>
       <form className="auth-form" onSubmit={submit}>

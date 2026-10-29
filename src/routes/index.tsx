@@ -1,16 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { HomeownerWizard } from "@/components/estimate/HomeownerWizard";
+import { LandingPage } from "@/components/landing/LandingPage";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (search: Record<string, unknown>): { experience?: string } =>
-    typeof search["experience"] === "string" ? { experience: search["experience"] } : {},
   head: () => ({
     meta: [
-      { title: "WalkQuote — Instant room painting estimates" },
-      { name: "description", content: "Walk a room on camera and get an AI-assisted interior painting estimate matched to your budget, with color previews." },
-      { property: "og:title", content: "WalkQuote — Instant room painting estimates" },
-      { property: "og:description", content: "AI-assisted room walkthrough estimates, budget matching, and before/after color previews for painting projects." },
+      { title: "WalkQuote — Instant interior painting estimates from a room walk" },
+      { name: "description", content: "Walk a room on camera or upload a video and get an AI interior painting estimate with a live wall-color preview, powered by Meta Muse Spark and SAM 3.1." },
+      { property: "og:title", content: "WalkQuote — Instant interior painting estimates" },
+      { property: "og:description", content: "A 30-second room walk becomes an itemized painting quote and before/after color preview, built on the Meta Model API." },
     ],
   }),
-  component: HomeownerWizard,
+  component: LandingPage,
 });

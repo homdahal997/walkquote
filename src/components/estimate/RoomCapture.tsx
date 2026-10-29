@@ -57,6 +57,7 @@ interface RoomCaptureProps {
   onRecordAgain: () => void | Promise<void>;
   onClearVideoDraft: () => void;
   onPhotoFiles: (event: ChangeEvent<HTMLInputElement>) => void;
+  onVideoFile: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemovePhoto: (id: string) => void;
   onStartAudioNote: () => void | Promise<void>;
   onStopAudioNote: () => void;
@@ -101,6 +102,7 @@ export function RoomCapture({
   onRecordAgain,
   onClearVideoDraft,
   onPhotoFiles,
+  onVideoFile,
   onRemovePhoto,
   onStartAudioNote,
   onStopAudioNote,
@@ -152,7 +154,22 @@ export function RoomCapture({
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 {!recording && !videoAsset && (
-                  <button type="button" onClick={() => void onStartVideoCapture()} className="inline-flex min-h-14 w-full flex-1 items-center justify-center gap-2 rounded-xl bg-teal-800 px-4 py-3 text-base font-bold text-white transition hover:bg-teal-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"><Camera size={18} /> Start walkthrough</button>
+                  <button type="button" data-testid="start-walkthrough-recording-btn" onClick={() => void onStartVideoCapture()} disabled={preparingVideo} className="inline-flex min-h-14 w-full flex-1 items-center justify-center gap-2 rounded-xl bg-teal-800 px-4 py-3 text-base font-bold text-white transition hover:bg-teal-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-wait disabled:opacity-60"><Camera size={18} /> Start walkthrough</button>
+                )}
+                {!recording && !cameraStream && (!videoAsset || !preparingVideo) && (
+                  <label data-testid="upload-video-btn" className="inline-flex min-h-14 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 focus-within:outline focus-within:outline-2 focus-within:outline-teal-700">
+                    <Upload size={18} />
+                    <span>{videoAsset ? "Upload a different video" : "Upload recorded video"}</span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={onVideoFile}
+                      disabled={preparingVideo}
+                      className="sr-only"
+                      data-testid="upload-video-input"
+                      aria-label="Upload a recorded room walkthrough video"
+                    />
+                  </label>
                 )}
                 {recording && (
                   <button type="button" onClick={onStopVideoCapture} className="inline-flex min-h-14 w-full flex-1 items-center justify-center gap-2 rounded-xl bg-rose-700 px-4 py-3 text-base font-bold text-white transition hover:bg-rose-800"><span className="h-3 w-3 rounded-sm bg-white" /> Stop and preview</button>

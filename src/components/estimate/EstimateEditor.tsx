@@ -268,7 +268,7 @@ function WallTintPreview({
         max={100}
         enabled={Boolean(mask)}
         ariaLabel="Compare your original room photo with the selected wall color preview"
-        ariaValueText={`${split}% original image, ${100 - split}% ${color.name} preview`}
+        ariaValueText={`${split}% ${color.name} preview, ${100 - split}% original image`}
         beforeLabel="Original"
         afterLabel="Color"
         stageClassName={`wq-comparison-stage relative mx-auto overflow-hidden rounded-2xl bg-slate-950 ring-1 ring-slate-900/10 ${imageReady ? "" : "aspect-video"}`}
@@ -291,13 +291,13 @@ function WallTintPreview({
             <canvas
               ref={canvasRef}
               className="pointer-events-none absolute inset-0 h-full w-full"
-              style={{ clipPath: `inset(0 ${100 - split}% 0 0)` } as CSSProperties}
+              style={{ clipPath: `inset(0 0 0 ${100 - split}%)` } as CSSProperties}
               aria-hidden="true"
             />
           )}
           <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-between gap-3 text-xs font-bold uppercase tracking-[0.12em] text-white drop-shadow">
-            <span className="rounded-full bg-slate-950/70 px-3 py-1.5">{mask ? "Color preview" : demo ? "Demo room" : "Original room photo"}</span>
-            <span className="rounded-full bg-slate-950/70 px-3 py-1.5">{mask ? "Original" : "Actual submitted image"}</span>
+            <span className="rounded-full bg-slate-950/70 px-3 py-1.5">{mask ? "Original Room" : demo ? "Demo room" : "Original room photo"}</span>
+            <span className="rounded-full bg-slate-950/70 px-3 py-1.5">{mask ? "Color Preview" : "Actual submitted image"}</span>
           </div>
         </>
       </BeforeAfterSlider>
@@ -360,8 +360,13 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
     frameWallMasks,
     openingChecks,
   } = state;
-  const [previewIndex, setPreviewFrame] = useState(primaryFrameIndex);
   const maskForFrame = (index: number) => (index === primaryFrameIndex ? mask : frameWallMasks?.[index] ?? null);
+  // When the primary view has no wall mask, open the preview on the first view that has one.
+  const [previewIndex, setPreviewFrame] = useState(() => {
+    if (mask) return primaryFrameIndex;
+    const fallback = frameWallMasks?.findIndex(Boolean) ?? -1;
+    return fallback >= 0 ? fallback : primaryFrameIndex;
+  });
   const showFramePicker = mode === "homeowner" && activeRoomFrames.length > 1 && activeRoomFrames.some((_, index) => index !== primaryFrameIndex && maskForFrame(index));
   const previewMask = maskForFrame(previewIndex) ?? mask;
   const previewImageUrl = maskForFrame(previewIndex) ? activeRoomFrames[previewIndex]?.previewUrl ?? primaryImageUrl : primaryImageUrl;
@@ -585,7 +590,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
         <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="preview-heading">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div><p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">05 · Wall color preview</p><h2 id="preview-heading" className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{mode === "demo" ? "Try a color on the sample room." : "Try a color on this room image."}</h2></div>
-            <span className="inline-flex items-center gap-2 self-start rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-slate-600">{mode === "demo" ? "Illustrative wall mask" : mask ? "Wall outline ready" : "Original image"}</span>
+            <span className="inline-flex items-center gap-2 self-start rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-slate-600">{mode === "demo" ? "Illustrative wall mask" : previewMask ? "Wall outline ready" : "Original image"}</span>
           </div>
           {primaryImageUrl ? <div className="mt-4">{mode === "demo" ? <SampleWallTintPreview room={sampleRoom ?? ROOMS.living} color={color} split={split} onSplit={setSplit} /> : <WallTintPreview imageUrl={previewImageUrl} imageAlt={primaryImageAlt} mask={previewMask} color={color} split={split} onSplit={setSplit} />}</div> : <div className="mt-4 grid aspect-video place-items-center rounded-2xl bg-slate-100 text-slate-600"><Info size={22} /><span className="mt-2 text-sm">Room photo unavailable</span></div>}
           {showFramePicker && (

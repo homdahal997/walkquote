@@ -127,7 +127,7 @@ async function observe(imageUrls: string[], transcript: string, sourceId: Analys
 
 /** Runs one SAM 3.1 concept prompt and returns its raw segmentation line (empty when nothing matched). */
 async function samConcept(imageUrl: string, concept: string) {
-  const response = await fetch(`${META_API}/responses`, {
+  const request = () => fetch(`${META_API}/responses`, {
     method: "POST",
     headers: metaHeaders(),
     body: JSON.stringify({
@@ -139,8 +139,31 @@ async function samConcept(imageUrl: string, concept: string) {
     }),
     signal: withTimeout(),
   });
+  let response = await request();
+  // One retry after a short pause on burst rate limits or transient server errors.
+  if (response.status === 429 || response.status >= 500) {
+    await response.body?.cancel().catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    response = await request();
+  }
   if (!response.ok) await failFromResponse(response);
   return outputText(await response.json()).trim();
+}
+
+/** Tries each wall concept in turn (then a plain "wall" retry) until SAM 3.1 returns a mask. */
+async function samWalls(imageUrl: string) {
+  const concepts = Array.from(new Set<string>([...SURFACE_PROMPTS.walls, "wall"]));
+  let lastError: unknown = null;
+  for (const concept of concepts) {
+    try {
+      const line = await samConcept(imageUrl, concept);
+      if (tryMerge([line])) return line;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  return "";
 }
 
 /**
@@ -175,7 +198,7 @@ function tryMerge(lines: Array<string | null>) {
 }
 
 /** Runs jobs with a small concurrency cap so one room does not flood the Meta API. */
-async function settleWithLimit<T>(jobs: Array<() => Promise<T>>, limit = 6) {
+async function settleWithLimit<T>(jobs: Array<() => Promise<T>>, limit = 3) {
   const results: PromiseSettledResult<T>[] = new Array(jobs.length);
   let next = 0;
   const worker = async () => {
@@ -282,13 +305,13 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
 
     const imageUrl = sourceId === "homeowner" ? frames[Math.floor((frames.length - 1) / 2)] : ROOM_IMAGES[sourceId];
     if (!imageUrl) return invalid;
-    if (sourceId !== "homeowner") return { maskText: await segment(imageUrl, SURFACE_PROMPTS.walls) };
+    if (sourceId !== "homeowner") return { maskText: mergeConceptLines([await samWalls(imageUrl)]) };
 
     // Walls on every view (color preview per angle), doors and windows on every view
     // (SAM 3.1 cross-checks Muse Spark's counts), trim on the primary view.
     const primaryIndex = Math.floor((frames.length - 1) / 2);
     const perFrameJobs = frames.flatMap((frame) => [
-      () => samConcept(frame, SURFACE_PROMPTS.walls[0]),
+      () => samWalls(frame),
       () => samConcept(frame, "door"),
       () => samConcept(frame, "window"),
     ]);
@@ -305,6 +328,7 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
       return value;
     };
     const wallLine = (i: number) => tryMerge([lineAt(i * 3)]);
+    // Primary-frame walls stay aligned with the primary image; other frames act as preview fallbacks.
     const maskText = keep(wallLine(primaryIndex));
     const trimMaskText = keep(tryMerge(trimJobs.map((_, index) => lineAt(perFrameJobs.length + index))));
     const openingMaskText = keep(tryMerge([lineAt(primaryIndex * 3 + 1), lineAt(primaryIndex * 3 + 2)]));
@@ -315,7 +339,7 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
     };
     const samDoorCounts = frames.map((_, i) => countAt(i * 3 + 1, "door"));
     const samWindowCounts = frames.map((_, i) => countAt(i * 3 + 2, "window"));
-    if (!maskText && !trimMaskText && !openingMaskText) throw new Error("segmentation-unavailable");
+    if (!maskText && !trimMaskText && !openingMaskText && !frameMaskTexts.some(Boolean)) throw new Error("segmentation-unavailable");
     return {
       maskText,
       trimMaskText,

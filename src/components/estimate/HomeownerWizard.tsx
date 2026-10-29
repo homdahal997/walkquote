@@ -26,6 +26,8 @@ import {
   MAX_CAPTURED_VIDEO_SECONDS,
   MAX_COMPRESSED_PHOTO_BYTES,
   MAX_ROOM_PHOTOS,
+  MAX_UPLOADED_VIDEO_BYTES,
+  MAX_UPLOADED_VIDEO_SECONDS,
   MAX_VIDEO_CAPTURE_BYTES,
   MIN_ROOM_PHOTOS,
   revokeMediaUrl,
@@ -167,7 +169,7 @@ export function HomeownerWizard() {
   const [budgetSliderValue, setBudgetSliderValue] = useState(1500);
   const [color, setColor] = useState<PaintColor>(() => colorFromHex(COLORS[0].hex));
   const [colorHexDraft, setColorHexDraft] = useState(COLORS[0].hex.toUpperCase());
-  const [split, setSplit] = useState(52);
+  const [split, setSplit] = useState(50);
   const [demoMasksVisible, setDemoMasksVisible] = useState(true);
   const [scopeSelection, setScopeSelection] = useState<ScopeSelections>({});
   const [scopeMessage, setScopeMessage] = useState("");
@@ -492,7 +494,7 @@ export function HomeownerWizard() {
     setMeasurementError("");
     setScopeMessage("");
     setDemoMasksVisible(true);
-    setSplit(52);
+    setSplit(50);
   };
 
   const updateWallColorFromHex = (value: string) => {
@@ -624,6 +626,47 @@ export function HomeownerWizard() {
     setCameraError("");
     await beginVideoCapture();
   };
+
+  const handleVideoFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (file.size > MAX_UPLOADED_VIDEO_BYTES) {
+      setCaptureError("Video file is too large (maximum 120MB). Please trim it or record a shorter walkthrough.");
+      return;
+    }
+
+    stopCameraTracks();
+    clearVideoDraft();
+    setCameraError("");
+    setCaptureError("");
+    setPreparingVideo(true);
+
+    try {
+      const previewUrl = rememberUrl(URL.createObjectURL(file));
+      setVideoAsset({
+        videoBlob: file,
+        audioBlob: file,
+        previewUrl,
+        mimeType: file.type || "video/mp4",
+        durationSeconds: 30,
+      });
+      const extracted = await extractRepresentativeFrames(file, undefined, { maxBytes: MAX_UPLOADED_VIDEO_BYTES, maxSeconds: MAX_UPLOADED_VIDEO_SECONDS });
+      extracted.frames.forEach((frame) => rememberUrl(frame.previewUrl));
+      setVideoFrames(extracted.frames);
+      setVideoAsset((current) => (current && current.videoBlob === file ? { ...current, durationSeconds: extracted.durationSeconds } : current));
+      setRecordingSeconds(Math.round(extracted.durationSeconds));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      setCaptureError(reason === "video-duration-invalid"
+        ? "This video is longer than 3 minutes. Please trim it to about 30–60 seconds or use 3–4 photos."
+        : "Could not process this video. Ensure it is a valid MP4/WebM/MOV file or use 3–4 photos.");
+    } finally {
+      setPreparingVideo(false);
+    }
+  };
+
 
   const onPhotoFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files ?? []);
@@ -865,16 +908,16 @@ export function HomeownerWizard() {
         setMask(wall);
         setTrimMask(trim);
         setOpeningMask(openings);
-        setMaskUnavailable(!wall);
         const perFrame = Array.isArray(maskResult.frameMaskTexts)
           ? await Promise.all(maskResult.frameMaskTexts.map((text) => decodeOptionalMask(text).catch(() => null)))
           : [];
+        setMaskUnavailable(!wall && !perFrame.some(Boolean));
         setFrameWallMasks(perFrame);
         setSamOpeningCounts({
           doors: Array.isArray(maskResult.samDoorCounts) ? maskResult.samDoorCounts : [],
           windows: Array.isArray(maskResult.samWindowCounts) ? maskResult.samWindowCounts : [],
         });
-        if (!wall && !trim && !openings) throw new Error("segmentation-output-empty");
+        if (!wall && !trim && !openings && !perFrame.some(Boolean)) throw new Error("segmentation-output-empty");
         setAnalysisStep(2, "done");
       } catch {
         setMask(null);
@@ -1046,7 +1089,7 @@ export function HomeownerWizard() {
     setScopeSelection(nextMode === "demo" ? { ceiling: false, trim: false, doors: false, patch: true } : {});
     setScopeMessage("");
     setDemoMasksVisible(true);
-    setSplit(52);
+    setSplit(50);
     submitBusyRef.current = false;
     setAnalysisBusy(false);
     analysisBusyRef.current = false;
@@ -1282,9 +1325,12 @@ export function HomeownerWizard() {
       let mediaManifest: RoomEstimateMediaManifest | undefined;
       if (mode === "homeowner") {
         const mediaAssets: PrivateRoomMediaAssetInput[] = [];
-        if (captureMode === "video" && videoAsset) {
+        if (captureMode === "video" && videoAsset && videoAsset.videoBlob.size <= MAX_VIDEO_CAPTURE_BYTES) {
           mediaAssets.push({ role: "walkthrough_video", blob: videoAsset.videoBlob, mimeType: videoAsset.mimeType });
           videoFrames.forEach((frame) => mediaAssets.push({ role: "analysis_frame", blob: frame.blob, mimeType: frame.mimeType }));
+        } else if (captureMode === "video" && videoAsset) {
+          // Large uploaded videos stay on this device; the contractor receives the four review frames.
+          videoFrames.forEach((frame) => mediaAssets.push({ role: "photo", blob: frame.blob, mimeType: frame.mimeType }));
         } else if (captureMode === "photos") {
           photoAssets.forEach((photo) => mediaAssets.push({ role: "photo", blob: photo.blob, mimeType: photo.mimeType }));
           if (audioNote) mediaAssets.push({ role: "spoken_note", blob: audioNote.blob, mimeType: audioNote.mimeType });
@@ -1293,7 +1339,7 @@ export function HomeownerWizard() {
         const uploadSession = mediaUploadSessionRef.current ?? new PrivateRoomMediaUploadSession();
         mediaUploadSessionRef.current = uploadSession;
         mediaManifest = await uploadSession.uploadAssets(mediaAssets, {
-          primaryFrameRole: captureMode === "video" ? "analysis_frame" : "photo",
+          primaryFrameRole: mediaAssets.some((asset) => asset.role === "analysis_frame") ? "analysis_frame" : "photo",
           primaryFrameIndex,
           analysisConsent,
           mediaShareConsent,
@@ -1325,7 +1371,7 @@ export function HomeownerWizard() {
         ...((mode as string) === "demo" ? { room_shape: "rectangular" as const } : homeownerWallAreaOnly ? {} : { room_shape: roomShape }),
         ...(typeof dimensions.perimeterFt === "number" ? { room_perimeter_ft: dimensions.perimeterFt } : {}),
         media_storage_mode: mode === "homeowner" ? "protected_chunk_records" : "demo_only",
-        media_kind: (mode as string) === "demo" ? "demo" : captureMode,
+        media_kind: (mode as string) === "demo" ? "demo" : captureMode === "video" && videoAsset && videoAsset.videoBlob.size > MAX_VIDEO_CAPTURE_BYTES ? "photos" : captureMode,
         ...(mediaManifest ? { media_manifest: mediaManifest } : {}),
         ...(mode === "homeowner" ? { primary_frame_index: primaryFrameIndex } : {}),
         media_references: (mode as string) === "demo" ? [] : ["media_manifest"],
@@ -1475,6 +1521,7 @@ export function HomeownerWizard() {
       onRecordAgain={recordAgain}
       onClearVideoDraft={clearVideoDraft}
       onPhotoFiles={onPhotoFiles}
+      onVideoFile={handleVideoFile}
       onRemovePhoto={removePhoto}
       onStartAudioNote={startAudioNote}
       onStopAudioNote={stopAudioNote}
@@ -1770,7 +1817,7 @@ export function HomeownerWizard() {
             </div>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm leading-5 text-slate-300">Explore the sample now. It opens without sign-in and creates no room request.</p>
-              <Link to="/" search={{ experience: "demo" }} onClick={() => setDemoVideoOpen(false)} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-300 px-5 py-3 text-base font-bold text-slate-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Explore the Interactive Demo <ArrowRight size={17} aria-hidden="true" /></Link>
+              <Link to="/walkthrough" search={{ experience: "demo" }} onClick={() => setDemoVideoOpen(false)} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-300 px-5 py-3 text-base font-bold text-slate-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Explore the Interactive Demo <ArrowRight size={17} aria-hidden="true" /></Link>
             </div>
           </div>
         </DialogContent>
