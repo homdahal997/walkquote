@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only test of WalkQuote landing page, /walkthrough route move, video upload, and before/after preview. `bun run test` passed 21/21. `bun run build` exited 0. The landing page, CTAs, logo -> /, /contractor?view=demo sample leads, /walkthrough?experience=demo links and the demo slider all work. Uploading a WebM file that has a duration header (made with OpenCV, 5s) worked: preview appeared, the status read 'Video ready · 5 seconds · 4 review frames', and Analyze was enabled after consent. Uploading a text file renamed .mp4 showed the 'Could not process this video...' error. Found 2 real bugs. (1) A Chrome MediaRecorder WebM upload is rejected with the wrong error 'longer than 3 minutes'. (2) In WallTintPreview the tint clip does not follow the divider except at split=50. Live AI analysis was not tested because META_MODEL_API_KEY is not set in this preview.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "EstimateEditor.tsx WallTintPreview (line ~294)", "issue": "BeforeAfterSlider places the divider at left: split%, but the canvas uses clipPath inset(0 0 0 ${100-split}%). The two only line up at split=50. At split=25 the divider is at 25% but the tint starts at 75%, so 25-75% on the 'Color Preview' side has no tint. At split=80 the tint starts at 20%, so it shows on the 'Original Room' side, left of the divider. SampleWallTintPreview uses inset(0 0 0 ${split}%), which is correct: verified in the browser at 25/50/70, with clip and divider matching. Fix: use `inset(0 0 0 ${split}%)` in WallTintPreview. The spec literally said 100-split, but that formula contradicts 'tint on the right of the divider'.", "selector": ".wq-comparison-stage canvas", "priority": "HIGH"},
+      {"component": "EstimateEditor.tsx WallTintPreview ariaValueText", "issue": "The value text reads `${split}% preview, ${100-split}% original`. This is reversed, because the left part (split%) is the original. SampleWallTintPreview has it the right way round.", "selector": "input[type=range][aria-label^='Compare your original room photo']", "priority": "LOW"},
+      {"component": "room-media.ts extractRepresentativeFrames (uploaded video)", "issue": "A WebM file made by Chrome MediaRecorder (canvas.captureStream, 4s, 502KB) was rejected with 'This video is longer than 3 minutes...'. RCA: these WebM files have no duration header, so video.duration=Infinity and seekable is empty. Uploads pass no recordedDurationSeconds, so measuredDuration=null and the code throws 'video-duration-invalid', which the app reports as the 3-minute message. Uploaded screen recordings and browser recordings will hit this. Fix: when the duration is not finite, set currentTime to a huge value (1e101), wait for durationchange or timeupdate to get the real duration, then reset currentTime to 0. Also show a separate message when the duration is unknown instead of 'longer than 3 minutes'.", "selector": "[data-testid=upload-video-input]", "priority": "HIGH"},
+      {"component": "HomeownerWizard.tsx handleVideoFile catch", "issue": "When processing fails (invalid file or the duration error), videoAsset is not cleared. The broken video preview, the 'PREVIEW READY' badge, 'Record again' and 'Delete' stay on screen, and the footer text still says 'Video and four compressed frames are ready.' next to the error. Analyze stays disabled, so this is a confusing state rather than a blocker. Fix: call clearVideoDraft() or setVideoAsset(null) in the catch block.", "selector": "video[aria-label='Recorded room walkthrough preview with audio']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Capture video panel", "issues": ["The clock badge always shows '/ 01:00' (e.g. '00:05 / 01:00'). Uploads can be up to 180s, so a 2-minute upload would show '02:00 / 01:00'.", "The 'Room preview' placeholder text is text-slate-900 on a bg-slate-950 stage at sm+, so it is almost invisible.", "The header 'About 30 seconds · up to 60' and the footer text 'WalkQuote stops at 60 seconds' do not mention the upload limits."]},
+      {"screen": "Demo estimate slider", "issues": ["The demo badges still read 'Before' / 'After · <color>', not 'Original Room' / 'Color Preview'. This is inconsistent with the landing page and WallTintPreview.", "At split around 70 the divider overlaps the 'After · Warm Linen' badge."]},
+      {"screen": "/walkthrough?experience=demo", "issues": ["The h1 that receives focus programmatically shows a visible boxed focus outline on load."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "WallTintPreview: change the canvas clipPath to `inset(0 0 0 ${split}%)` so the tint starts at the divider, and fix the reversed ariaValueText.",
+    "extractRepresentativeFrames: handle WebM/MediaRecorder files with Infinity duration (seek to 1e101 and read the duration). Separate the 'unknown duration' error from 'longer than 3 minutes'.",
+    "handleVideoFile catch: clear videoAsset and videoFrames on failure so the stale preview and 'ready' text disappear.",
+    "Optional: show the upload limit (e.g. '/ 03:00') in the clock badge for uploads; fix the low-contrast 'Room preview' placeholder; make the demo badge labels consistent."
+  ],
+  "critical_code_review_comments": [
+    "analyze-room.server.ts samWalls runs the wall concepts one after another, each with one retry. With 4 frames plus door, window and trim jobs at concurrency 3, the worst-case time can be long. Check it against the server-function or Worker timeout.",
+    "EstimateEditor previewIndex is set once in the useState initializer. If the masks change after mount, the fallback to another frame's mask is never applied again.",
+    "Uploaded videos larger than MAX_VIDEO_CAPTURE_BYTES are quietly left out of the contractor request (HomeownerWizard ~1328), but the consent text says the original video is stored.",
+    "Auth pages (Login/Signup/ForgotPassword) still label the link to '/' 'Homeowner demo'. '/' is now the landing page.",
+    "HomeownerWizard.tsx (1828 lines) and room-media.ts (728 lines) are over the 700-line guideline."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped as requested)", "frontend": "80% (8/10 checks passed; failed: MediaRecorder WebM upload, WallTintPreview clip alignment by code review)"},
+  "seed_data_creation": "None. Test videos were generated at /tmp/room_vp8.webm (OpenCV VP8, 5s, has a duration header, works) and /tmp/test_room.webm (Chrome MediaRecorder, no duration header, rejected). /tmp/room.mp4 is mp4v, which Chromium cannot decode, so it correctly shows the error.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Vite dev server is at http://localhost:3000 (bunx vite dev --port 3000 --host 0.0.0.0, log /root/dev.log). META_MODEL_API_KEY is not set, so live analysis cannot run. To reach the capture step, go to /walkthrough and click the 'Capture My Own Room (Live AI)' button; this goes straight to capture. A venv with opencv is at /tmp/vv (/tmp/mkvid.py, mk2.py) for generating test videos. Retest: a MediaRecorder WebM upload, the WallTintPreview clip at split 25/75 (needs a real mask, so check the code or inject one), and clearing the video state after an upload error.",
+  "rca of the issue": "Upload duration bug: Chrome MediaRecorder WebM has no duration header, so duration=Infinity and seekable is empty. The upload path passes recordedDurationSeconds=undefined, so measuredDuration=null and 'video-duration-invalid' is thrown, which the app maps to the 3-minute message. Reproduce by uploading a MediaRecorder webm. Tint bug: the divider is at split% while the clip starts at (100-split)%, so they only match at 50."
+}

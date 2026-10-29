@@ -658,8 +658,9 @@ export function HomeownerWizard() {
       setVideoAsset((current) => (current && current.videoBlob === file ? { ...current, durationSeconds: extracted.durationSeconds } : current));
       setRecordingSeconds(Math.round(extracted.durationSeconds));
     } catch (error) {
+      clearVideoDraft();
       const reason = error instanceof Error ? error.message : "";
-      setCaptureError(reason === "video-duration-invalid"
+      setCaptureError(reason === "video-too-long"
         ? "This video is longer than 3 minutes. Please trim it to about 30–60 seconds or use 3–4 photos."
         : "Could not process this video. Ensure it is a valid MP4/WebM/MOV file or use 3–4 photos.");
     } finally {

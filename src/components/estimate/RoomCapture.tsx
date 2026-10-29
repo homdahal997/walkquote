@@ -142,12 +142,12 @@ export function RoomCapture({
                   <video src={videoAsset.previewUrl} controls playsInline className="absolute inset-0 h-full w-full object-contain" aria-label="Recorded room walkthrough preview with audio" />
                 ) : (
                   <div className="absolute inset-0 grid place-items-center p-6 text-center">
-                    <div><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-slate-300 bg-white text-slate-700 shadow-sm"><Camera size={26} /></span><p className="mt-3 text-base font-semibold text-slate-900">Room preview</p></div>
+                    <div><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-slate-300 bg-white text-slate-700 shadow-sm"><Camera size={26} /></span><p className="mt-3 text-base font-semibold text-slate-900 sm:text-slate-200">Room preview</p></div>
                   </div>
                 )}
                 {(recording || videoAsset || cameraStream) && <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-3">
                   <span className="rounded-full bg-slate-950/80 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-white">{recording ? "Recording" : videoAsset ? "Preview ready" : "Camera ready"}</span>
-                  {(recording || videoAsset) && <span className="rounded-full bg-slate-950/80 px-3 py-1.5 text-sm font-semibold tabular-nums text-white">{clockTime(recordingSeconds)} / 01:00</span>}
+                  {(recording || videoAsset) && <span className="rounded-full bg-slate-950/80 px-3 py-1.5 text-sm font-semibold tabular-nums text-white">{clockTime(recordingSeconds)}{recording ? " / 01:00" : ""}</span>}
                 </div>}
                 {recording && <div className="pointer-events-none absolute inset-x-3 bottom-3 hidden items-center gap-2 rounded-xl bg-slate-950/85 px-3 py-2 text-sm font-semibold text-white sm:flex"><span className="h-2.5 w-2.5 animate-pulse rounded-full bg-rose-500" />Walk slowly. Describe the work you want done.</div>}
               </div>
@@ -278,7 +278,7 @@ export function RoomCapture({
       </div>
       {captureError && <p className="flex items-start gap-2 rounded-xl bg-rose-50 p-4 text-sm leading-6 text-rose-900" role="alert"><CircleAlert size={17} className="mt-0.5 shrink-0" />{captureError}</p>}
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-sm:hidden text-sm leading-6 text-slate-600">{captureMode === "video" ? videoAsset ? "Video and four compressed frames are ready." : "Record about 30 seconds. WalkQuote stops at 60 seconds." : photoAssets.length >= MIN_ROOM_PHOTOS ? "Your selected angles are ready for analysis." : "Select three or four photos to continue."}</p>
+        <p className="max-sm:hidden text-sm leading-6 text-slate-600">{captureMode === "video" ? videoAsset ? "Video and four compressed frames are ready." : "Record about 30 seconds (stops at 60), or upload a video up to 3 minutes and 120MB." : photoAssets.length >= MIN_ROOM_PHOTOS ? "Your selected angles are ready for analysis." : "Select three or four photos to continue."}</p>
         <p className="hidden max-sm:block text-base font-medium leading-5 text-slate-700" role="status">{captureMode === "video" ? preparingVideo ? "Preparing video…" : videoAsset ? videoFrames.length === 4 ? "Video ready." : "Try recording again or add photos." : "Record a room tour to continue." : photoAssets.length >= MIN_ROOM_PHOTOS ? "Photos ready." : `Add ${Math.max(0, MIN_ROOM_PHOTOS - photoAssets.length)} more photo${MIN_ROOM_PHOTOS - photoAssets.length === 1 ? "" : "s"}.`}</p>
         <button type="button" onClick={() => void onStartAnalysis()} disabled={!captureIsReady || analysisBusy || (mode === "homeowner" && !analysisConsent)} className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-teal-800 px-6 py-4 text-base font-bold text-white shadow-lg shadow-teal-900/15 transition hover:bg-teal-900 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none">Analyze room <ArrowRight size={18} /></button>
       </div>

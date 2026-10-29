@@ -192,8 +192,8 @@ function SampleWallTintPreview({
             <path d={outlinePath} fill="none" stroke={color.hex} strokeOpacity="0.85" strokeWidth="4" />
           </svg>
           <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-between gap-3 text-xs font-bold uppercase tracking-[0.1em] text-white drop-shadow">
-            <span className="rounded-full bg-slate-950/80 px-3 py-1.5">Before</span>
-            <span className="rounded-full bg-slate-950/80 px-3 py-1.5">After · {color.name}</span>
+            <span className="rounded-full bg-slate-950/80 px-3 py-1.5">Original Room</span>
+            <span className="rounded-full bg-slate-950/80 px-3 py-1.5">Color Preview · {color.name}</span>
           </div>
         </>
       </BeforeAfterSlider>
@@ -268,7 +268,7 @@ function WallTintPreview({
         max={100}
         enabled={Boolean(mask)}
         ariaLabel="Compare your original room photo with the selected wall color preview"
-        ariaValueText={`${split}% ${color.name} preview, ${100 - split}% original image`}
+        ariaValueText={`${split}% original image, ${100 - split}% ${color.name} preview`}
         beforeLabel="Original"
         afterLabel="Color"
         stageClassName={`wq-comparison-stage relative mx-auto overflow-hidden rounded-2xl bg-slate-950 ring-1 ring-slate-900/10 ${imageReady ? "" : "aspect-video"}`}
@@ -291,7 +291,7 @@ function WallTintPreview({
             <canvas
               ref={canvasRef}
               className="pointer-events-none absolute inset-0 h-full w-full"
-              style={{ clipPath: `inset(0 0 0 ${100 - split}%)` } as CSSProperties}
+              style={{ clipPath: `inset(0 0 0 ${split}%)` } as CSSProperties}
               aria-hidden="true"
             />
           )}

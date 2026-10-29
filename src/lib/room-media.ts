@@ -487,6 +487,38 @@ export function selectDistinctKeyframes(candidates: KeyframeCandidate[], count: 
   return picks;
 }
 
+/** Browser-made WebM files often lack a duration header; seeking far ahead makes the browser compute it. */
+function probeUnknownDuration(video: HTMLVideoElement) {
+  return new Promise<number | null>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      video.removeEventListener("durationchange", check);
+      video.removeEventListener("timeupdate", check);
+      const value = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+      try {
+        video.currentTime = 0;
+      } catch {
+        // Seeking back is best effort; frame sampling seeks again.
+      }
+      resolve(value);
+    };
+    const check = () => {
+      if (Number.isFinite(video.duration) && video.duration > 0) finish();
+    };
+    const timeout = window.setTimeout(finish, 8_000);
+    video.addEventListener("durationchange", check);
+    video.addEventListener("timeupdate", check);
+    try {
+      video.currentTime = 1e101;
+    } catch {
+      finish();
+    }
+  });
+}
+
 export async function extractRepresentativeFrames(
   videoBlob: Blob,
   recordedDurationSeconds?: number,
@@ -535,13 +567,16 @@ export async function extractRepresentativeFrames(
     } catch {
       seekableDuration = null;
     }
-    const metadataDuration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
     const timerDuration = typeof recordedDurationSeconds === "number" && Number.isFinite(recordedDurationSeconds) && recordedDurationSeconds > 0
       ? recordedDurationSeconds
       : null;
+    const metadataDuration = Number.isFinite(video.duration) && video.duration > 0
+      ? video.duration
+      : timerDuration === null ? await probeUnknownDuration(video) : null;
     const measuredDuration = timerDuration ?? metadataDuration ?? seekableDuration;
-    if (measuredDuration === null || measuredDuration > limits.maxSeconds) {
-      throw new Error("video-duration-invalid");
+    if (measuredDuration === null) throw new Error("video-duration-invalid");
+    if (measuredDuration > limits.maxSeconds) {
+      throw new Error(limits.maxSeconds > MAX_CAPTURED_VIDEO_SECONDS ? "video-too-long" : "video-duration-invalid");
     }
     const durationSeconds = Math.min(limits.maxSeconds, measuredDuration);
 
