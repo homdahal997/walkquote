@@ -13,13 +13,7 @@ const MAX_TRANSCRIPT_CHARS = 600;
 const MAX_MASK_TEXT_CHARS = 1_800_000;
 const MAX_SEGMENTATION_BUNDLE_CHARS = 4_000_000;
 
-// SAM 3.1 concept prompts must be short noun phrases, one concept per request (Meta docs);
-// long instructions return zero matches. Each surface lists the concepts merged into its mask.
-const SURFACE_PROMPTS = {
-  walls: ["interior wall", "wall", "painted wall"],
-  trim: ["baseboard", "door frame"],
-  openings: ["door", "window"],
-} as const;
+import { SURFACE_PROMPTS } from "./sam-concepts";
 
 const ROOM_IMAGES = {
   living: "https://ellprnxjjzatijdxcogk.supabase.co/storage/v1/render/image/public/files/chat-generated-images/project-clduq7bkofnka3ym75h8/3a6f75e7-594a-4065-befc-3787170e6102.webp?width=1200&resize=contain&quality=75",

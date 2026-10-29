@@ -91,6 +91,29 @@ export interface MaskData {
   regions: MaskRegion[];
 }
 
+export interface StageTiming {
+  startedAt?: number;
+  endedAt?: number;
+}
+
+export type NoteSource = "video-audio" | "voice-note" | "typed" | "none";
+
+/** Live outputs of each Meta model, shown in the analysis inspector as they arrive. */
+export interface ModelTrace {
+  noteSource: NoteSource;
+  frameCount: number;
+  transcript: string;
+  observations: string[];
+  assessment: RoomAssessment;
+  wallMask: MaskData | null;
+  trimMask: MaskData | null;
+  openingMask: MaskData | null;
+  frameWallMasks: Array<MaskData | null>;
+  samDoorCounts: Array<number | null>;
+  samWindowCounts: Array<number | null>;
+  stageTimings: StageTiming[];
+}
+
 export interface AnalysisReply {
   error?: string;
   errorCode?: string;

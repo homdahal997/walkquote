@@ -12,7 +12,8 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import type { CaptureMode, MaskData, AnalysisStatus, RoomFrame } from "@/types/estimate";
+import type { CaptureMode, MaskData, AnalysisStatus, ModelTrace, RoomFrame } from "@/types/estimate";
+import { MaskOverlay, ModelInspector } from "@/components/estimate/ModelInspector";
 
 const ANALYSIS_STEPS = [
   { title: "Transcribe the room note", detail: "Room-only spoken scope" },
@@ -34,6 +35,7 @@ interface AnalysisProgressProps {
   analysisError: string;
   analysisStatuses: AnalysisStatus[];
   maskUnavailable: boolean;
+  modelTrace?: ModelTrace;
   onBackToCapture: () => void;
 }
 
@@ -71,6 +73,7 @@ export function AnalysisProgress({
   analysisError,
   analysisStatuses,
   maskUnavailable,
+  modelTrace,
   onBackToCapture,
 }: AnalysisProgressProps) {
   return (
@@ -82,7 +85,7 @@ export function AnalysisProgress({
       </div>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
         <div className={`relative overflow-hidden rounded-[1.8rem] p-2 sm:p-5 ${mode === "homeowner" ? "bg-white sm:bg-slate-950" : "bg-slate-950 p-3 sm:p-5"}`}>
-          {primaryImageUrl ? <img src={primaryImageUrl} alt={primaryImageAlt} className={`block h-auto w-full rounded-2xl ${mode === "homeowner" ? "bg-slate-100 sm:bg-transparent" : ""}`} /> : <div className={`grid aspect-video place-items-center rounded-2xl ${mode === "homeowner" ? "bg-slate-100 text-slate-700 sm:bg-slate-900 sm:text-slate-300" : "bg-slate-900 text-slate-300"}`}><Loader2 className="animate-spin" size={26} /></div>}
+          {primaryImageUrl ? <div className="relative"><img src={primaryImageUrl} alt={primaryImageAlt} className={`block h-auto w-full rounded-2xl ${mode === "homeowner" ? "bg-slate-100 sm:bg-transparent" : ""}`} />{modelTrace && <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl transition-opacity duration-500" style={{ opacity: modelTrace.wallMask ? 1 : 0 }} data-testid="analysis-wall-overlay"><MaskOverlay walls={modelTrace.wallMask} alpha={105} /></div>}</div> : <div className={`grid aspect-video place-items-center rounded-2xl ${mode === "homeowner" ? "bg-slate-100 text-slate-700 sm:bg-slate-900 sm:text-slate-300" : "bg-slate-900 text-slate-300"}`}><Loader2 className="animate-spin" size={26} /></div>}
           <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-300 ${mode === "homeowner" ? "max-sm:hidden" : ""}`}><span>{mode === "demo" ? `Generated demo · ${sampleRoomName}` : captureMode === "video" ? "Selected video frames" : "Selected homeowner photos"}</span><span>Analysis only · no physical measurement</span></div>
           <div className={`pointer-events-none absolute left-7 top-7 h-7 w-7 border-l-2 border-t-2 border-teal-300 ${mode === "homeowner" ? "max-sm:hidden" : ""}`} />
           <div className={`pointer-events-none absolute right-7 top-7 h-7 w-7 border-r-2 border-t-2 border-teal-300 ${mode === "homeowner" ? "max-sm:hidden" : ""}`} />
@@ -128,6 +131,7 @@ export function AnalysisProgress({
           {analysisBusy && <p className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-teal-900"><Loader2 size={16} className="animate-spin" /> Waiting for analysis results</p>}
         </div>
       </div>
+      {modelTrace && <ModelInspector trace={modelTrace} statuses={analysisStatuses} frameUrl={primaryImageUrl} />}
     </motion.section>
   );
 }

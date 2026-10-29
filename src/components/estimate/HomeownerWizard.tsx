@@ -86,6 +86,7 @@ import type {
   CaptureMode,
   EstimateSource,
   MaskData,
+  ModelTrace,
   PaintColor,
   RoomAssessment,
   RoomDimensions,
@@ -95,6 +96,7 @@ import type {
   Screen,
   ScopeLine,
   ScopeSelections,
+  StageTiming,
 } from "@/types/estimate";
 
 function pageMotion(reduceMotion: boolean) {
@@ -209,6 +211,7 @@ export function HomeownerWizard() {
   const [frameWallMasks, setFrameWallMasks] = useState<Array<MaskData | null>>([]);
   const [samOpeningCounts, setSamOpeningCounts] = useState<{ doors: Array<number | null>; windows: Array<number | null> }>({ doors: [], windows: [] });
   const [analysisStatuses, setAnalysisStatuses] = useState<AnalysisStatus[]>(["pending", "pending", "pending", "pending"]);
+  const [stageTimings, setStageTimings] = useState<StageTiming[]>([]);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(null);
   const [analysisBusy, setAnalysisBusy] = useState(false);
@@ -368,6 +371,20 @@ export function HomeownerWizard() {
   const primaryFrame = activeRoomFrames[primaryFrameIndex] ?? null;
   const primaryImageUrl = (mode as string) === "demo" ? sampleRoom?.image ?? "" : primaryFrame?.previewUrl ?? "";
   const primaryImageAlt = (mode as string) === "demo" ? sampleRoom?.alt ?? "Generated demo room" : "A representative frame from the homeowner's room walkthrough";
+  const modelTrace: ModelTrace = {
+    noteSource: captureMode === "video" ? "video-audio" : audioNote ? "voice-note" : cleanRoomNote(scopeNote) ? "typed" : "none",
+    frameCount: activeRoomFrames.length,
+    transcript,
+    observations,
+    assessment,
+    wallMask: mask,
+    trimMask,
+    openingMask,
+    frameWallMasks,
+    samDoorCounts: samOpeningCounts.doors,
+    samWindowCounts: samOpeningCounts.windows,
+    stageTimings,
+  };
   const captureIsReady = (mode as string) === "demo"
     ? true
     : captureMode === "video"
@@ -783,6 +800,13 @@ export function HomeownerWizard() {
 
   const setAnalysisStep = (index: number, status: AnalysisStatus) => {
     setAnalysisStatuses((current) => current.map((item, position) => position === index ? status : item));
+    const now = Date.now();
+    setStageTimings((current) => {
+      const next = [...current];
+      const timing = next[index] ?? {};
+      next[index] = status === "working" ? { startedAt: now } : status === "pending" ? {} : { startedAt: timing.startedAt ?? now, endedAt: now };
+      return next;
+    });
   };
 
   const startAnalysis = async () => {
@@ -818,6 +842,8 @@ export function HomeownerWizard() {
     setObservations([]);
     setAssessment({ visibleDoorCount: null, visibleWindowCount: null, visibleMarkCount: null, wallTone: "unknown", scaleReference: "none", suggestedDimensions: null, openingDeductionSqFt: null });
     setAnalysisStatuses(["pending", "pending", "pending", "pending"]);
+    setStageTimings([]);
+    setTranscript("");
     setScreen("analysis");
 
     let noteForAnalysis = (mode as string) === "demo" ? ROOMS[sampleRoomId].spokenCue : cleanRoomNote(scopeNote);
@@ -920,6 +946,8 @@ export function HomeownerWizard() {
         });
         if (!wall && !trim && !openings && !perFrame.some(Boolean)) throw new Error("segmentation-output-empty");
         setAnalysisStep(2, "done");
+        // Hold briefly so the SAM 3.1 outlines are visible in the live trace before the estimate opens.
+        if (!reduceMotion) await new Promise((resolve) => window.setTimeout(resolve, 1_400));
       } catch {
         setMask(null);
         setTrimMask(null);
@@ -1547,6 +1575,7 @@ export function HomeownerWizard() {
       analysisError={analysisError}
       analysisStatuses={analysisStatuses}
       maskUnavailable={maskUnavailable}
+      modelTrace={mode === "homeowner" ? modelTrace : undefined}
       onBackToCapture={() => setScreen("capture")}
     />
   );
