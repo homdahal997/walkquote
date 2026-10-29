@@ -85,6 +85,13 @@ describe("AI at work panel", () => {
     expect(screen.getByTestId("model-sam-summary")).toHaveTextContent("Wall masks on 2 of 4 views · 1 door and 2 windows detected");
   });
 
+  it("tells a failed transcription apart from a silent recording", () => {
+    render(<ModelInspector trace={trace({ voiceFailed: true })} statuses={["skipped", "working", "pending", "pending"]} frameUrl="" />);
+
+    expect(screen.getByText(/Transcription was unavailable/)).toBeInTheDocument();
+    expect(screen.queryByText(/No spoken words were heard/)).not.toBeInTheDocument();
+  });
+
   it("explains a skipped segmentation instead of showing an empty overlay", () => {
     render(<ModelInspector trace={trace()} statuses={["skipped", "done", "skipped", "pending"]} frameUrl="" />);
 

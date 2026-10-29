@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend test of the new 'AI at Work' panel (ModelInspector) on /walkthrough, plus regression checks. `bun run test` passed 25/25 (including model-inspector.test.tsx) and `bun run build` exited 0. In the live homeowner flow (3 JPEG uploads, consent, Analyze) the panel and all three cards (voice, spark, sam) rendered. data-status moved pending -> working -> done/skipped/error as expected. The stage clock ticked every 0.3s on the running card; I delayed the server-function responses by 1.5-2.5s with page.route to see this. Muse Spark ended in 'error' with a red message, and SAM stayed 'pending' (Queued, --.-s). There was no crash, no blank screen and no console errors from the panel. 'Back to capture' works and keeps the photos and the consent tick. Typed note: the voice input reads 'Typed note (no audio to transcribe)' and the status is done (0.0s), never stuck. Uploaded Chrome MediaRecorder WebM (canvas.captureStream with an oscillator audio track, 4s): accepted as 'Video ready · 4 seconds · 4 review frames', so the iteration-1 bug is fixed. The voice input reads 'Walkthrough video audio'; voice went working -> skipped and spark went working -> error. Second run after a failure: the statuses and timings reset cleanly, with no stale 'Failed'. On mobile (390px) the panel stacks into one column with no horizontal scroll. Regression passed: / landing, /walkthrough?experience=demo (slider 20/80 with correct aria text, color swatch, Review Budget vs. Quote) and /contractor?view=demo. Important finding: in this preview the real failure is NOT the missing META_MODEL_API_KEY. The server function throws 'Missing Supabase environment variable(s): SUPABASE_SERVICE_ROLE_KEY. Connect Supabase in Lovable Cloud.' (the usage/quota store) before the Meta call. That error is not an errorCode reply, so the UI shows the generic step message.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "analyzeRoomFn (/_serverFn)", "issue": "In the preview, every stage throws 'Missing Supabase environment variable(s): SUPABASE_SERVICE_ROLE_KEY' (the usage store) as a raw thrown Error, not as a structured {errorCode} reply. It fails before the META_MODEL_API_KEY check, so the expected 'service is not configured' path is never reached. Environment limitation, not a code bug; reported for awareness."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ModelInspector VoiceCard (skipped branch)", "issue": "When transcription FAILS (here a server error), HomeownerWizard sets step 0 to 'skipped'. The card then says 'No spoken words were heard, so the analysis continues from the images.' That is not true, because transcription errored. The toast at the same time says 'Voice note could not be read (...)'. Fix: keep a separate flag such as voiceFailed or noteSkipReason in modelTrace, and show 'Transcription unavailable, continuing with images' for that case.", "selector": "[data-testid=model-card-voice][data-status=skipped]", "priority": "MEDIUM"},
+      {"component": "HomeownerWizard startAnalysis catch (line ~1028)", "issue": "Any thrown error during stage 1 (here Supabase misconfiguration, or the missing Meta key, network or 503 errors) is shown as 'The room observations did not return in a usable format.' This is misleading: the service was unavailable, the output was not malformed. Consider a 'service unavailable' message for thrown or non-AnalysisStageError errors.", "selector": "[role=alert]", "priority": "LOW"},
+      {"component": "HomeownerWizard voice catch toast (line ~877)", "issue": "The toast shows the raw internal server message to end users, including 'Missing Supabase environment variable(s): SUPABASE_SERVICE_ROLE_KEY. Connect Supabase in Lovable Cloud.', plus the MIME type and KB. It leaks config details and is not user-friendly.", "selector": "[data-sonner-toast]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AI at work panel (mobile 390px)", "issues": ["The model name 'muse-voice-transcribe-1.0' is cut off to 'muse-voice-transcr…', and the roles are cut off too ('Muse Spark · room geome…'). Desktop also cuts off 'Muse Spark · room geometry &…' and 'SAM 3.1 · wall & opening segmen…'. Consider letting the role line wrap."]},
+      {"screen": "Analysis screen, video mode (desktop)", "issues": ["A 16:9 video frame in the left dark panel leaves a large empty dark area below the image, because the grid row stretches to the height of the right-hand step list."]}
+    ]
+  },
+  "test_report_links": ["/app/src/test/model-inspector.test.tsx"],
+  "action_items": [
+    "Tell 'transcription failed' apart from 'no spoken words' in the voice card (and in step 0's 'skipped' sub-label in AnalysisProgress).",
+    "Map thrown or unstructured server errors in stage 1 to a 'service unavailable' message instead of 'did not return in a usable format'.",
+    "Sanitize the voice-skip toast so raw server error text (Supabase env names) is not shown to users.",
+    "Optional: let the card role/model text wrap instead of cutting it off on narrow cards."
+  ],
+  "critical_code_review_comments": [
+    "The analysis server function runs the Supabase quota check before the Meta key check. In any environment without SUPABASE_SERVICE_ROLE_KEY, all live runs fail with a raw Error, so the panel's success path cannot be seen live in this preview.",
+    "modelTrace is rebuilt on every HomeownerWizard render and ModelInspector is not memoized. It is fine for now because StageClock owns its own interval, but the whole panel still re-renders on any wizard state change.",
+    "For video with no audio track (videoAsset.audioBlob null), noteSource is still 'video-audio'. The card then shows 'No spoken words were heard' and the PII note, even though nothing was sent.",
+    "HomeownerWizard.tsx is now 1859 lines, well over the 700-line guideline. The analysis orchestration (startAnalysis/setAnalysisStep/modelTrace) is a good candidate for a useRoomAnalysis hook.",
+    "decodeBits/decodeBase64Bytes and the mask-paint loop are duplicated between ModelInspector.MaskOverlay and AnalysisProgress.SegmentationPreview (DRY)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "92% (all requested flows pass; 1 medium + 2 low messaging issues)"},
+  "seed_data_creation": "Test images /tmp/room1.jpg, /tmp/room2.jpg, /tmp/room3.jpg (960x720 JPEGs, made with /tmp/mkimg.py in the /tmp/vv venv). The WebM was generated inside the browser with MediaRecorder.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Dev server: http://localhost:3000 (bunx vite dev, log /root/dev.log). Live runs fail fast (~0.4s) because SUPABASE_SERVICE_ROLE_KEY is missing, so use page.route('**/_serverFn/**') with a 1.5-2.5s delay to see the 'working' state and the ticking clock. Selectors: role=button name 'Capture My Own Room (Live AI)', role=tab 'Photos'/'Video', input[aria-label='Choose three or four room photos from your library'], #photo-scope-note, input[type=checkbox] (consent), button 'Analyze room', button 'Back to capture'. The Total clock is also a [data-testid=model-stage-clock], and it comes first in DOM order.",
+  "rca of the issue": "The voice card says 'No spoken words' after a failure because HomeownerWizard's voice catch block calls setAnalysisStep(0,'skipped'). VoiceCard renders 'skipped' plus noteSource video-audio as 'No spoken words were heard'; no reason for the skip is passed through. Reproduce: upload any webm with audio in this preview, then Analyze. The toast says 'could not be read' while the card says 'no spoken words'."
+}

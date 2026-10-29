@@ -110,7 +110,7 @@ function ModelCard({ testId, icon, model, role, status, timing, children }: { te
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${status === "working" ? "bg-teal-400/15 text-teal-300" : "bg-slate-800 text-slate-300"}`}>{icon}</span>
-          <div className="min-w-0"><p className="truncate font-mono text-sm font-semibold text-white">{model}</p><p className="truncate text-xs text-slate-400">{role}</p></div>
+          <div className="min-w-0"><p className="break-all font-mono text-sm font-semibold text-white">{model}</p><p className="text-xs leading-4 text-slate-400">{role}</p></div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1"><StatusPill status={status} /><StageClock timing={timing} status={status} /></div>
       </header>
@@ -141,7 +141,7 @@ function VoiceCard({ trace, status }: { trace: ModelTrace; status: AnalysisStatu
         {status === "done" && trace.transcript ? (
           <blockquote data-testid="model-voice-transcript" className="line-clamp-4 border-l-2 border-teal-400/60 pl-3 italic text-slate-100">“{trace.transcript}”</blockquote>
         ) : status === "skipped" ? (
-          <p className="text-slate-400">{transcribed ? "No spoken words were heard, so the analysis continues from the images." : "Nothing to transcribe."}</p>
+          <p className="text-slate-400">{trace.voiceFailed ? "Transcription was unavailable, so the analysis continues from the images and any typed note." : transcribed ? "No spoken words were heard, so the analysis continues from the images." : "Nothing to transcribe."}</p>
         ) : status === "error" ? (
           <p className="text-rose-300">Transcription stopped.</p>
         ) : (

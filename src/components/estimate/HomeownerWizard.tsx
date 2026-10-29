@@ -212,6 +212,7 @@ export function HomeownerWizard() {
   const [samOpeningCounts, setSamOpeningCounts] = useState<{ doors: Array<number | null>; windows: Array<number | null> }>({ doors: [], windows: [] });
   const [analysisStatuses, setAnalysisStatuses] = useState<AnalysisStatus[]>(["pending", "pending", "pending", "pending"]);
   const [stageTimings, setStageTimings] = useState<StageTiming[]>([]);
+  const [voiceFailed, setVoiceFailed] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(null);
   const [analysisBusy, setAnalysisBusy] = useState(false);
@@ -384,6 +385,7 @@ export function HomeownerWizard() {
     samDoorCounts: samOpeningCounts.doors,
     samWindowCounts: samOpeningCounts.windows,
     stageTimings,
+    voiceFailed,
   };
   const captureIsReady = (mode as string) === "demo"
     ? true
@@ -843,6 +845,7 @@ export function HomeownerWizard() {
     setAssessment({ visibleDoorCount: null, visibleWindowCount: null, visibleMarkCount: null, wallTone: "unknown", scaleReference: "none", suggestedDimensions: null, openingDeductionSqFt: null });
     setAnalysisStatuses(["pending", "pending", "pending", "pending"]);
     setStageTimings([]);
+    setVoiceFailed(false);
     setTranscript("");
     setScreen("analysis");
 
@@ -873,8 +876,9 @@ export function HomeownerWizard() {
             const detail = voiceError instanceof Error ? voiceError.message : String(voiceError);
             console.warn("Voice note skipped:", detail, audioToTranscribe.type, audioToTranscribe.size);
             setTranscript(noteForAnalysis);
+            setVoiceFailed(true);
             setAnalysisStep(0, "skipped");
-            toast.warning(`Voice note could not be read (${detail}; ${audioToTranscribe.type || "unknown type"}, ${Math.round(audioToTranscribe.size / 1024)} KB). Continuing with your photos.`);
+            toast.warning("The voice track could not be transcribed. Continuing with your images and any typed note.");
           }
         } else {
           setTranscript(noteForAnalysis);
@@ -1025,11 +1029,15 @@ export function HomeownerWizard() {
                 : stageError?.code === "ATTEMPT_INVALID"
                   ? "This analysis attempt could not be verified. Start a fresh analysis to continue."
                   : null;
-      setAnalysisError(serviceMessage ?? (activeStep === 0
-        ? "The spoken note could not be transcribed. Try recording again, or remove the note and continue with the selected images."
-        : activeStep === 1
-          ? "The room observations did not return in a usable format. Start a fresh analysis to retry."
-          : "The analysis could not finish. Start a fresh analysis to retry."));
+      setAnalysisError(serviceMessage ?? (!stageError
+        ? "The analysis service could not be reached. Check your connection and try again in a minute."
+        : stageError.message && !stageError.code
+          ? stageError.message
+          : activeStep === 0
+            ? "The spoken note could not be transcribed. Try recording again, or remove the note and continue with the selected images."
+            : activeStep === 1
+              ? "The room observations did not return in a usable format. Start a fresh analysis to retry."
+              : "The analysis could not finish. Start a fresh analysis to retry."));
     } finally {
       setAnalysisBusy(false);
       analysisBusyRef.current = false;
