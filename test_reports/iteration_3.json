@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend test of (A) Lighter Uploads and (B) Retry Failed Step, plus regression. `bun run test`: 29/29 passed. `bun run build`: exit 0. (A) compressRoomPhoto, called through a dynamic import of /src/lib/room-media.ts on three 4000x3000 noisy JPEGs (~5.0MB each), produced 1280x960 blobs of ~281KB (<=360KB). Upload thumbnails are 1280x960 blobs. A 1920x1080 MediaRecorder webm (canvas.captureStream) was accepted ('Video ready · 4 seconds · 4 review frames'), and the 4 frames sent in the observe request decode to 1280x720. (B) A live failure (Supabase key missing) shows 'The analysis service could not be reached...' with Retry Analysis (desktop retry-analysis-btn) next to Back to capture. Clicking Retry stays on the analysis screen. Spark goes error -> working -> error, and the voice card keeps its status and time: typed note done 0.0s; video audio 'skipped' 1.8s with the 'Transcription was unavailable' text. The retried observe request has the same attemptId, the same frames and the same transcript note. No second transcribe request is sent for the video path (request log: transcribe, observe, observe, all with the same attemptId). The Retry button is hidden while busy. I mocked a structured reply (route.fulfill with x-tss-serialized seroval JSON): observe fails, then succeeds on retry. The run then went on to segment with the same attemptId and reached the 'Review the room. Set a net wall area.' screen at 390px using retry-analysis-btn-mobile. No horizontal scroll. VISITOR_DAILY_LIMIT mock: the limit message 'This connection has reached its daily limit... Try again after Fri, Jan 30, 12:00 AM UTC.' shows, and there is no Retry button on desktop or mobile. Back to capture keeps the photos, and 'Analyze room' then sends a NEW attemptId. A STAGE_ALREADY_USED mock: Retry still shows, and clicking it starts a new attemptId, as designed. Regression passed: the landing CTAs (/walkthrough, /contractor?view=demo), the demo slider on /walkthrough?experience=demo, /contractor?view=demo inbox, and the AI at Work panel rendering. No page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ModelInspector Total clock (line ~232-244) on retry", "issue": "On a retry where voice settled, stageTimings[0] is kept, so Total runs from the first run's voice start. It therefore includes the idle time the user spent on the error screen before clicking Retry. Observed: Total 6.6s while the stages took 0.0s + 1.5s; video case Total 9.3s. Cosmetic.", "selector": "[data-testid=model-stage-clock] (first = Total)", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Analysis error after STAGE_ALREADY_USED / attempt errors", "issues": ["The message says 'Start a fresh analysis to try again' while the button reads 'Retry Analysis' (it does start a fresh attempt). The wording is slightly inconsistent. Optional: label it 'Start fresh analysis' for that code."]}
+    ]
+  },
+  "test_report_links": ["/app/src/test/upload-compression.test.ts"],
+  "action_items": [
+    "Optional (LOW): leave the idle gap out of the AI at Work Total on retry. For example, compute Total from the retry start, or sum the per-stage durations."
+  ],
+  "critical_code_review_comments": [
+    "encodeAnalysisJpeg step-down works: 0.82 -> 0.74 -> 0.66, then it shrinks by 0.82x (floor 480px) and resets to 0.74, for up to 8 tries, then returns null. Very noisy inputs could return null and give 'photo-too-large-after-compression'. Acceptable.",
+    "releaseStage runs only in the model-call catch. If reserveStage succeeds but the network drops the response, the stage stays reserved, and the retry gets STAGE_ALREADY_USED, which then correctly falls back to a fresh attempt (uses one more daily run).",
+    "Client retry gating is regex based (/LIMIT|USAGE/). It also hides Retry for USAGE_LIMIT_UNAVAILABLE ('Try again in a little while'). That is defensible but a bit stricter than the spec, which only names daily limits.",
+    "HomeownerWizard.tsx is now 1887 lines, well over the 700-line guideline. startAnalysis/resume logic is a good candidate for a useRoomAnalysis hook."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "100% of requested flows pass (1 low cosmetic issue)"},
+  "seed_data_creation": "None. Images and webm are generated in the browser.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Dev server http://localhost:3000. To mock server-function replies, use page.route('**/_serverFn/**') with route.fetch() to copy the headers (they must include x-tss-serialized: true), then fulfill with a seroval body: {\"t\":10,\"i\":0,\"p\":{\"k\":[\"result\",\"error\",\"context\"],\"v\":[{\"t\":10,\"i\":1,\"p\":{\"k\":[...keys],\"v\":[{\"t\":1,\"s\":\"str\"}|{\"t\":0,\"s\":num}]},\"o\":0},{\"t\":2,\"s\":1},{\"t\":10,\"i\":2,\"p\":{\"k\":[],\"v\":[]},\"o\":0}]},\"o\":0}. To read the request stage and attemptId, match '\"s\":\"(observe|...)\"' and '\"s\":\"<uuid>\"' in post_data. Video file input: input[type=file][accept*=video] (aria 'Upload a recorded room walkthrough video')."
+}

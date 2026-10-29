@@ -229,10 +229,13 @@ function SamCard({ trace, status, frameUrl }: { trace: ModelTrace; status: Analy
 }
 
 export function ModelInspector({ trace, statuses, frameUrl }: { trace: ModelTrace; statuses: AnalysisStatus[]; frameUrl: string }) {
-  const starts = trace.stageTimings.map((timing) => timing?.startedAt).filter((value): value is number => typeof value === "number");
-  const firstStart = starts.length ? Math.min(...starts) : undefined;
   const running = statuses.some((status) => status === "working");
-  const lastEnd = Math.max(0, ...trace.stageTimings.map((timing) => timing?.endedAt ?? 0)) || undefined;
+  // Sum of stage durations, so time spent on an error screen before a retry is not counted.
+  const finishedMs = trace.stageTimings.reduce((sum, timing) => sum + (timing?.startedAt && timing.endedAt ? timing.endedAt - timing.startedAt : 0), 0);
+  const live = trace.stageTimings.find((timing) => timing?.startedAt && !timing.endedAt);
+  const totalTiming: StageTiming | undefined = live?.startedAt
+    ? { startedAt: live.startedAt - finishedMs }
+    : finishedMs > 0 ? { startedAt: 1, endedAt: 1 + finishedMs } : undefined;
   return (
     <section data-testid="ai-at-work-panel" aria-labelledby="ai-at-work-heading" className="rounded-[1.8rem] border border-slate-800 bg-slate-950 p-4 text-white sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -241,7 +244,7 @@ export function ModelInspector({ trace, statuses, frameUrl }: { trace: ModelTrac
           <h2 id="ai-at-work-heading" className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">AI at work</h2>
         </div>
         <p className="flex items-center gap-2 text-xs text-slate-400" aria-live="polite">
-          Total <StageClock timing={firstStart ? { startedAt: firstStart, endedAt: lastEnd } : undefined} status={running ? "working" : "done"} />
+          Total <StageClock timing={totalTiming} status={running && live ? "working" : "done"} />
         </p>
       </div>
       <div className="mt-5 grid gap-4 lg:grid-cols-3">

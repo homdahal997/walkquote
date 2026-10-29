@@ -92,6 +92,12 @@ describe("AI at work panel", () => {
     expect(screen.queryByText(/No spoken words were heard/)).not.toBeInTheDocument();
   });
 
+  it("totals stage durations without the idle time before a retry", () => {
+    render(<ModelInspector trace={trace({ stageTimings: [{ startedAt: 1_000, endedAt: 2_500 }, { startedAt: 60_000, endedAt: 62_000 }] })} statuses={["done", "error", "pending", "pending"]} frameUrl="" />);
+
+    expect(screen.getAllByTestId("model-stage-clock")[0]).toHaveTextContent("3.5s");
+  });
+
   it("explains a skipped segmentation instead of showing an empty overlay", () => {
     render(<ModelInspector trace={trace()} statuses={["skipped", "done", "skipped", "pending"]} frameUrl="" />);
 

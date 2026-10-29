@@ -1044,9 +1044,9 @@ export function HomeownerWizard() {
             : stageError?.code === "USAGE_LIMIT_UNAVAILABLE"
               ? "The estimate service cannot safely start right now. Try again in a little while."
               : stageError?.code === "STAGE_ALREADY_USED"
-                ? "This analysis stage was already submitted. Start a fresh analysis to try again."
+                ? "This analysis stage was already submitted. Tap Retry Analysis to start a fresh run with the same frames."
                 : stageError?.code === "ATTEMPT_INVALID"
-                  ? "This analysis attempt could not be verified. Start a fresh analysis to continue."
+                  ? "This analysis attempt could not be verified. Tap Retry Analysis to start a fresh run with the same frames."
                   : null;
       setAnalysisError(serviceMessage ?? (!stageError
         ? "The analysis service could not be reached. Check your connection and try again in a minute."

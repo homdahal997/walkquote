@@ -12,6 +12,9 @@ Stack: TanStack Start v1 (React 19, Vite, Tailwind v4), Cloudflare Workers, Lova
 - Clearer errors: thrown/unreachable service vs server-provided messages; voice failure distinguished from silence; no raw config details in toasts
 - Tests 26/26 (src/test/model-inspector.test.tsx added), build OK
 - Note: preview lacks SUPABASE_SERVICE_ROLE_KEY and META_MODEL_API_KEY, so live analysis fails in preview
+- Lighter Uploads: encodeAnalysisJpeg (room-media.ts) longest side <=1280px, JPEG 0.82 then steps down; frames <=240KB, photos <=360KB
+- Retry Failed Step: Retry Analysis button reuses attemptId, frame data URLs and note (analysisResumeRef), skips settled voice; server releaseStage frees failed reservation; no retry for daily limits; used/invalid attempts retry fresh
+- Tests 30/30, build OK
 
 ## Backlog (robustness first)
 - P0: friendly config check when the usage store or Meta key is missing (structured error instead of thrown)
