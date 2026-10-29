@@ -213,6 +213,8 @@ export function HomeownerWizard() {
   const [analysisStatuses, setAnalysisStatuses] = useState<AnalysisStatus[]>(["pending", "pending", "pending", "pending"]);
   const [stageTimings, setStageTimings] = useState<StageTiming[]>([]);
   const [voiceFailed, setVoiceFailed] = useState(false);
+  const [analysisRetryable, setAnalysisRetryable] = useState(false);
+  const analysisResumeRef = useRef<{ attemptId: string; frameDataUrls: string[]; note: string; voiceSettled: boolean } | null>(null);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(null);
   const [analysisBusy, setAnalysisBusy] = useState(false);
@@ -811,7 +813,7 @@ export function HomeownerWizard() {
     });
   };
 
-  const startAnalysis = async () => {
+  const startAnalysis = async (retry = false) => {
     if (mode !== "homeowner") return;
     if (mode === "homeowner") {
       if (!analysisConsent) {
@@ -829,12 +831,16 @@ export function HomeownerWizard() {
     }
     if (analysisBusyRef.current) return;
 
-    const attemptId = crypto.randomUUID();
+    // A retry reuses the same attempt, prepared frames and note, and skips a voice step that already settled.
+    const resume = retry ? analysisResumeRef.current : null;
+    if (!retry) analysisResumeRef.current = null;
+    const attemptId = resume?.attemptId ?? crypto.randomUUID();
     const sourceId: AnalysisSourceId = (mode as string) === "demo" ? sampleRoomId : "homeowner";
     analysisBusyRef.current = true;
     setAnalysisBusy(true);
     setAnalysisError("");
     setAnalysisErrorCode(null);
+    setAnalysisRetryable(false);
     setMask(null);
     setTrimMask(null);
     setOpeningMask(null);
@@ -843,20 +849,28 @@ export function HomeownerWizard() {
     setSamOpeningCounts({ doors: [], windows: [] });
     setObservations([]);
     setAssessment({ visibleDoorCount: null, visibleWindowCount: null, visibleMarkCount: null, wallTone: "unknown", scaleReference: "none", suggestedDimensions: null, openingDeductionSqFt: null });
-    setAnalysisStatuses(["pending", "pending", "pending", "pending"]);
-    setStageTimings([]);
-    setVoiceFailed(false);
-    setTranscript("");
+    if (resume?.voiceSettled) {
+      setAnalysisStatuses((current) => current.map((status, index) => (index === 0 ? status : "pending")));
+      setStageTimings((current) => current.slice(0, 1));
+    } else {
+      setAnalysisStatuses(["pending", "pending", "pending", "pending"]);
+      setStageTimings([]);
+      setVoiceFailed(false);
+      setTranscript("");
+    }
     setScreen("analysis");
 
-    let noteForAnalysis = (mode as string) === "demo" ? ROOMS[sampleRoomId].spokenCue : cleanRoomNote(scopeNote);
-    let frameDataUrls: string[] = [];
+    let noteForAnalysis = resume?.voiceSettled ? resume.note : (mode as string) === "demo" ? ROOMS[sampleRoomId].spokenCue : cleanRoomNote(scopeNote);
+    let frameDataUrls: string[] = resume?.frameDataUrls ?? [];
     let activeStep = 0;
 
     try {
-      if (mode === "homeowner") {
+      if (resume?.voiceSettled) {
+        // Frames and the transcribed note are reused from the failed run.
+      } else if (mode === "homeowner") {
         const activeFrames = captureMode === "video" ? videoFrames : photoAssets;
         frameDataUrls = await Promise.all(activeFrames.map((frame) => blobToDataUrl(frame.blob)));
+        analysisResumeRef.current = { attemptId, frameDataUrls, note: noteForAnalysis, voiceSettled: false };
         const audioToTranscribe = captureMode === "video" ? videoAsset?.audioBlob ?? null : audioNote?.blob ?? null;
         if (audioToTranscribe) {
           activeStep = 0;
@@ -888,6 +902,7 @@ export function HomeownerWizard() {
         setTranscript(noteForAnalysis);
         setAnalysisStep(0, "skipped");
       }
+      analysisResumeRef.current = { attemptId, frameDataUrls, note: noteForAnalysis, voiceSettled: true };
 
       activeStep = 1;
       setCurrentAnalysisStep(1);
@@ -1009,9 +1024,13 @@ export function HomeownerWizard() {
       }
       setMeasurementError("");
       setScopeSelection({});
+      analysisResumeRef.current = null;
       setScreen((mode as string) === "demo" ? "measurements" : suggested ? "estimate" : "measurements");
     } catch (caught) {
       const stageError = caught instanceof AnalysisStageError ? caught : null;
+      // Daily limits cannot be retried; a used or rejected attempt retries with a fresh one.
+      setAnalysisRetryable(!/LIMIT|USAGE/.test(stageError?.code ?? ""));
+      if (stageError?.code && /STAGE_ALREADY|ATTEMPT/.test(stageError.code)) analysisResumeRef.current = null;
       setAnalysisStep(activeStep, "error");
       setCurrentAnalysisStep(activeStep);
       setAnalysisErrorCode(stageError?.code ?? null);
@@ -1036,8 +1055,8 @@ export function HomeownerWizard() {
           : activeStep === 0
             ? "The spoken note could not be transcribed. Try recording again, or remove the note and continue with the selected images."
             : activeStep === 1
-              ? "The room observations did not return in a usable format. Start a fresh analysis to retry."
-              : "The analysis could not finish. Start a fresh analysis to retry."));
+              ? "The room observations did not return in a usable format. Your frames are kept, so tap Retry Analysis."
+              : "The analysis could not finish. Your frames are kept, so tap Retry Analysis."));
     } finally {
       setAnalysisBusy(false);
       analysisBusyRef.current = false;
@@ -1565,7 +1584,7 @@ export function HomeownerWizard() {
       onRemoveAudioNote={removeAudioNote}
       onScopeNoteChange={setScopeNote}
       onAnalysisConsentChange={setAnalysisConsent}
-      onStartAnalysis={startAnalysis}
+      onStartAnalysis={() => startAnalysis()}
     />
   );
 
@@ -1584,6 +1603,7 @@ export function HomeownerWizard() {
       analysisStatuses={analysisStatuses}
       maskUnavailable={maskUnavailable}
       modelTrace={mode === "homeowner" ? modelTrace : undefined}
+      onRetryAnalysis={mode === "homeowner" && analysisRetryable ? () => void startAnalysis(true) : undefined}
       onBackToCapture={() => setScreen("capture")}
     />
   );

@@ -9,6 +9,7 @@ import {
   FileImage,
   Info,
   Loader2,
+  RotateCcw,
   Sparkles,
   X,
 } from "lucide-react";
@@ -36,7 +37,16 @@ interface AnalysisProgressProps {
   analysisStatuses: AnalysisStatus[];
   maskUnavailable: boolean;
   modelTrace?: ModelTrace;
+  onRetryAnalysis?: () => void;
   onBackToCapture: () => void;
+}
+
+function RetryButton({ onRetry, testId }: { onRetry: () => void; testId: string }) {
+  return (
+    <button type="button" data-testid={testId} onClick={onRetry} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-teal-800 px-4 py-3 text-base font-bold text-white transition-colors hover:bg-teal-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 sm:w-auto">
+      <RotateCcw size={16} /> Retry Analysis
+    </button>
+  );
 }
 
 interface CapturedFrameViewerProps {
@@ -74,6 +84,7 @@ export function AnalysisProgress({
   analysisStatuses,
   maskUnavailable,
   modelTrace,
+  onRetryAnalysis,
   onBackToCapture,
 }: AnalysisProgressProps) {
   return (
@@ -96,7 +107,7 @@ export function AnalysisProgress({
             <>
               <p className="flex items-center gap-2 text-base font-semibold text-rose-900"><CircleAlert size={18} /> Analysis stopped</p>
               <p className="mt-2 text-base leading-6 text-slate-700" role="alert">{analysisError}</p>
-              {!analysisBusy && <button type="button" onClick={onBackToCapture} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50">Back to capture <ArrowLeft size={16} /></button>}
+              {!analysisBusy && <div className="mt-4 grid gap-2">{onRetryAnalysis && <RetryButton onRetry={onRetryAnalysis} testId="retry-analysis-btn-mobile" />}<button type="button" onClick={onBackToCapture} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50">Back to capture <ArrowLeft size={16} /></button></div>}
             </>
           ) : (
             <>
@@ -125,6 +136,7 @@ export function AnalysisProgress({
           {maskUnavailable && !analysisError && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-950">The wall outline could not be prepared. The estimate can continue without a wall-color overlay.</p>}
           {!analysisBusy && analysisError && (
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              {onRetryAnalysis && <RetryButton onRetry={onRetryAnalysis} testId="retry-analysis-btn" />}
               <button type="button" onClick={onBackToCapture} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50">Back to capture <ArrowLeft size={16} /></button>
             </div>
           )}

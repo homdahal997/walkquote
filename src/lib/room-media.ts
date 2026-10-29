@@ -386,34 +386,8 @@ export async function compressRoomPhoto(file: File): Promise<RoomImageAsset> {
   }
 
   try {
-    const maxDimension = 1_280;
-    let width = bitmap.width;
-    let height = bitmap.height;
-    const scale = Math.min(1, maxDimension / Math.max(width, height));
-    width = Math.max(1, Math.round(width * scale));
-    height = Math.max(1, Math.round(height * scale));
-
-    const canvas = document.createElement("canvas");
-    let quality = 0.8;
-    let blob: Blob | null = null;
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d", { alpha: false });
-      if (!context) throw new Error("photo-compression-unavailable");
-      context.drawImage(bitmap, 0, 0, width, height);
-      blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-      if (!blob) throw new Error("photo-compression-unavailable");
-      if (blob.size <= MAX_COMPRESSED_PHOTO_BYTES) break;
-      if (quality > 0.56) quality -= 0.08;
-      else {
-        width = Math.max(480, Math.round(width * 0.86));
-        height = Math.max(360, Math.round(height * 0.86));
-        quality = 0.72;
-      }
-    }
-
-    if (!blob || blob.size > MAX_COMPRESSED_PHOTO_BYTES) throw new Error("photo-too-large-after-compression");
+    const blob = await encodeAnalysisJpeg(bitmap, bitmap.width, bitmap.height, PHOTO_TARGET_BYTES);
+    if (!blob) throw new Error("photo-too-large-after-compression");
     return {
       id: crypto.randomUUID(),
       blob,
@@ -429,6 +403,40 @@ export async function compressRoomPhoto(file: File): Promise<RoomImageAsset> {
 
 function canvasJpeg(canvas: HTMLCanvasElement, quality: number) {
   return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+}
+
+/** Analysis images: longest side at most 1280px, JPEG 0.82 first, then smaller until under budget. */
+export const ANALYSIS_MAX_DIMENSION = 1_280;
+export const ANALYSIS_JPEG_QUALITY = 0.82;
+export const PHOTO_TARGET_BYTES = 360_000;
+export const FRAME_TARGET_BYTES = 240_000;
+
+export function fitWithin(width: number, height: number, maxDimension = ANALYSIS_MAX_DIMENSION) {
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+export async function encodeAnalysisJpeg(source: CanvasImageSource, sourceWidth: number, sourceHeight: number, maxBytes: number) {
+  if (!sourceWidth || !sourceHeight) throw new Error("image-dimensions-invalid");
+  let { width, height } = fitWithin(sourceWidth, sourceHeight);
+  let quality = ANALYSIS_JPEG_QUALITY;
+  const canvas = document.createElement("canvas");
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("image-compression-unavailable");
+    context.drawImage(source, 0, 0, width, height);
+    const blob = await canvasJpeg(canvas, quality);
+    if (!blob) throw new Error("image-compression-unavailable");
+    if (blob.size <= maxBytes) return blob;
+    if (quality > 0.66) quality = Math.round((quality - 0.08) * 100) / 100;
+    else {
+      ({ width, height } = fitWithin(width, height, Math.max(480, Math.round(Math.max(width, height) * 0.82))));
+      quality = 0.74;
+    }
+  }
+  return null;
 }
 
 export interface KeyframeCandidate {
@@ -629,19 +637,9 @@ export async function extractRepresentativeFrames(
 
     for (const timestampSeconds of positions) {
       await seekTo(timestampSeconds);
-
-      const maxDimension = 768;
-      const scale = Math.min(1, maxDimension / Math.max(video.videoWidth, video.videoHeight));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-      const context = canvas.getContext("2d", { alpha: false });
-      if (!context || !video.videoWidth || !video.videoHeight) throw new Error("video-frame-unavailable");
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      let frameBlob = await canvasJpeg(canvas, 0.76);
-      if (!frameBlob) throw new Error("video-frame-unavailable");
-      if (frameBlob.size > MAX_ANALYSIS_FRAME_BYTES) frameBlob = await canvasJpeg(canvas, 0.58);
-      if (!frameBlob || frameBlob.size > MAX_ANALYSIS_FRAME_BYTES) throw new Error("video-frame-too-large");
+      if (!video.videoWidth || !video.videoHeight) throw new Error("video-frame-unavailable");
+      const frameBlob = await encodeAnalysisJpeg(video, video.videoWidth, video.videoHeight, FRAME_TARGET_BYTES);
+      if (!frameBlob) throw new Error("video-frame-too-large");
       frames.push({
         id: crypto.randomUUID(),
         blob: frameBlob,

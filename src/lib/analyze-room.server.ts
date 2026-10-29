@@ -260,6 +260,23 @@ async function reserveStage(visitorAddress: string, attemptId: string, stage: St
   return null;
 }
 
+/** Frees a stage reservation after a model failure so the same attempt can retry that stage. */
+async function releaseStage(visitorAddress: string, attemptId: string, stage: Stage) {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const visitorHash = await sha256Hex(`walkquote-visitor:${visitorAddress}`);
+    await supabaseAdmin
+      .from("analysis_usage")
+      .delete()
+      .eq("day", new Date().toISOString().slice(0, 10))
+      .eq("visitor_hash", visitorHash)
+      .eq("attempt_id", attemptId)
+      .eq("stage", stage);
+  } catch (error) {
+    console.error("analyze-room release failed", { stage, error });
+  }
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const invalid = { error: "Invalid request." };
 
@@ -356,6 +373,7 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
     };
   } catch (error) {
     console.error("analyze-room stage failed", { stage, sourceId, error });
+    if (!options.skipQuota) await releaseStage(visitorAddress, attemptId, stage);
     const message = error instanceof GatewayError ? error.message : "Room analysis did not finish. Please retry.";
     return { error: message };
   }
