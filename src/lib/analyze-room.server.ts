@@ -283,21 +283,32 @@ async function reserveStage(visitorAddress: string, attemptId: string, stage: St
   const visitorHash = await sha256Hex(`walkquote-visitor:${visitorAddress}`);
   const day = new Date().toISOString().slice(0, 10);
 
-  let rows: Array<{ attempt_id: string; visitor_hash: string; stage: string }> = [];
+  let rows: Array<{ attempt_id: string; visitor_hash: string; stage: string; created_at: string }> = [];
   try {
     const { data, error } = await supabaseAdmin
       .from("analysis_usage")
-      .select("attempt_id, visitor_hash, stage")
+      .select("attempt_id, visitor_hash, stage, created_at")
       .eq("day", day);
     if (error) throw error;
     rows = data ?? [];
   } catch {
     return { error: "The estimate service cannot safely start right now. Try again in a little while.", errorCode: "USAGE_LIMIT_UNAVAILABLE", message: "The estimate service cannot safely start right now. Try again in a little while." };
   }
+  const alreadyUsed = { error: "This analysis step was already used. Start a fresh analysis.", errorCode: "STAGE_ALREADY_USED" };
+  // A lost response can leave a stage reserved. Allow exactly ONE resend of the same
+  // attempt+stage, by the same visitor, within RESEND_WINDOW_MS; anything else is blocked
+  // so a replayed stage cannot make unlimited Meta calls without spending a daily run.
+  const tryResend = async (reservedAt: string | undefined) => {
+    const reserved = rows.find((row) => row.attempt_id === attemptId && row.stage === stage);
+    const at = Date.parse(reservedAt ?? reserved?.created_at ?? "");
+    if (!reserved || reserved.visitor_hash !== visitorHash || !(Date.now() - at <= RESEND_WINDOW_MS)) return alreadyUsed;
+    const { error: resendError } = await supabaseAdmin
+      .from("analysis_usage")
+      .insert({ day, visitor_hash: visitorHash, attempt_id: attemptId, stage: `resend:${stage}` });
+    return resendError ? alreadyUsed : { resumed: true as const };
+  };
   const isKnownStage = rows.some((row) => row.attempt_id === attemptId && row.stage === stage);
-  // A lost response can leave a stage reserved: the client resends the same attemptId+stage,
-  // so treat that as the in-flight run instead of an error and stop it burning a daily run.
-  if (isKnownStage) return { resumed: true as const };
+  if (isKnownStage) return tryResend(undefined);
   const isKnownAttempt = rows.some((row) => row.attempt_id === attemptId);
   if (stage.startsWith("render-")) {
     // Previews belong to an analysed room: they never start a new estimate run, and are capped per run.
@@ -315,8 +326,11 @@ async function reserveStage(visitorAddress: string, attemptId: string, stage: St
     .from("analysis_usage")
     .insert({ day, visitor_hash: visitorHash, attempt_id: attemptId, stage });
   if (error) {
-    // Concurrent resubmission of the same attempt + stage resumes the in-flight run.
-    if (error.code === "23505") return { resumed: true as const };
+    // A concurrent resubmission raced us: it gets the same single-resend rule.
+    if (error.code === "23505") {
+      rows.push({ attempt_id: attemptId, visitor_hash: visitorHash, stage, created_at: new Date().toISOString() });
+      return tryResend(undefined);
+    }
     return { error: "The estimate service cannot safely start right now. Try again in a little while.", errorCode: "USAGE_LIMIT_UNAVAILABLE", message: "The estimate service cannot safely start right now. Try again in a little while." };
   }
   return null;
