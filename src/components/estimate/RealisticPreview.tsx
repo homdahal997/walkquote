@@ -30,7 +30,7 @@ export function useRealisticPreview({ source, frameIndex, originalUrl, mask, col
   const cache = useRef(new Map<string, Extract<RealisticRenderState, { status: "done" }>>());
   const requestRef = useRef(0);
   const frame = source?.frameDataUrls[frameIndex];
-  const available = Boolean(source && frame && mask && originalUrl);
+  const available = Boolean(source && frame && originalUrl);
 
   // A new color or view cancels any running request and shows the button (or a cached render).
   useEffect(() => {
@@ -44,7 +44,7 @@ export function useRealisticPreview({ source, frameIndex, originalUrl, mask, col
   }, []);
 
   const start = useCallback(async () => {
-    if (state.status === "working" || !source || !frame || !mask || !originalUrl) return;
+    if (state.status === "working" || !source || !frame || !originalUrl) return;
     const id = ++requestRef.current;
     const startedAt = Date.now();
     setState({ status: "working", startedAt });

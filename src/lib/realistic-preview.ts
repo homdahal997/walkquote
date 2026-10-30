@@ -46,8 +46,20 @@ export async function imageSize(src: string) {
  * Keeps only wall pixels of the Muse Image result: the render is scaled onto the original frame
  * and cut with SAM 3.1's wall mask (softly feathered), leaving a transparent overlay elsewhere.
  */
-export async function composeWallRender(originalUrl: string, renderUrl: string, mask: MaskData) {
+export async function composeWallRender(originalUrl: string, renderUrl: string, mask: MaskData | null) {
   const [original, render] = await Promise.all([loadImage(originalUrl), loadImage(renderUrl)]);
+  if (!mask) {
+    // No SAM outline for this view: show Muse Image's full repaint, scaled onto the frame.
+    const full = document.createElement("canvas");
+    full.width = original.naturalWidth;
+    full.height = original.naturalHeight;
+    const ctx = full.getContext("2d");
+    if (!ctx || !full.width || !full.height) throw new Error("render-canvas");
+    ctx.drawImage(render, 0, 0, full.width, full.height);
+    const fullBlob = await new Promise<Blob | null>((resolve) => full.toBlob(resolve, "image/png"));
+    if (!fullBlob) throw new Error("render-canvas");
+    return URL.createObjectURL(fullBlob);
+  }
   const width = original.naturalWidth;
   const height = original.naturalHeight;
   const maskCanvas = document.createElement("canvas");
