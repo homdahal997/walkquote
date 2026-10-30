@@ -1,4 +1,4 @@
-import type { PaintColor, QuoteTotals, RoomDimensions, ScopeLine, ScopeSelections, WallTone } from "@/types/estimate";
+import type { ArchitecturalFeatures, EvidenceBadge, PaintColor, QuoteTotals, RoomAssessment, RoomDimensions, ScopeLine, ScopeSelections, WallTone } from "@/types/estimate";
 
 export const PRICE_BOOK = {
   walls: {
@@ -18,6 +18,12 @@ export const PRICE_BOOK = {
     rateHigh: 5,
     detailRateLabel: "$4.00–$5.00 per linear ft",
     summaryRateLabel: "$4.00–$5.00 / ft",
+  },
+  crown: {
+    rateLow: 3.5,
+    rateHigh: 5,
+    detailRateLabel: "$3.50–$5.00 per linear ft",
+    summaryRateLabel: "$3.50–$5.00 / ft",
   },
   doors: {
     rateLow: 45,
@@ -73,8 +79,11 @@ export function buildScopeLines(
   wallTone: WallTone,
   note: string,
   mode: "homeowner" | "demo",
+  assessment?: RoomAssessment | null,
+  evidence: ScopeEvidenceOptions = {},
 ): ScopeLine[] {
   const lowered = note.toLowerCase();
+  const features = assessment?.architecturalFeatures ?? null;
   const lines: ScopeLine[] = [
     {
       id: "walls",
@@ -171,7 +180,109 @@ export function buildScopeLines(
     });
   }
 
+  if (features?.crownMoldingPresent && typeof measurements.perimeterFt === "number" && measurements.perimeterFt > 0) {
+    const lf = measurements.perimeterFt;
+    const trimIndex = lines.findIndex((line) => line.id === "trim");
+    lines.splice(trimIndex >= 0 ? trimIndex + 1 : lines.length, 0, {
+      id: "crown",
+      label: "Crown molding painting · recommended",
+      detail: `${Math.round(lf)} linear ft · ${PRICE_BOOK.crown.detailRateLabel}`,
+      quantity: lf,
+      unit: "linear ft",
+      rateLow: PRICE_BOOK.crown.rateLow,
+      rateHigh: PRICE_BOOK.crown.rateHigh,
+      low: lf * PRICE_BOOK.crown.rateLow,
+      high: lf * PRICE_BOOK.crown.rateHigh,
+      required: false,
+      defaultIncluded: true,
+    });
+  }
+
+  if (assessment && mode !== "demo") applyGroundedEvidence(lines, measurements, assessment, evidence);
   return lines;
+}
+
+export interface ScopeEvidenceOptions {
+  trimDetected?: boolean;
+  doorCounts?: Array<number | null>;
+}
+
+const TALL_TRIM_FACTOR = 1.25;
+const HIGH_CEILING_FACTOR = 1.3;
+
+function rescale(line: ScopeLine, factor: number) {
+  line.rateLow = Math.round(line.rateLow * factor * 100) / 100;
+  line.rateHigh = Math.round(line.rateHigh * factor * 100) / 100;
+  line.low = line.quantity * line.rateLow;
+  line.high = line.quantity * line.rateHigh;
+  line.detail = `${Math.round(line.quantity)} ${line.unit} · $${line.rateLow.toFixed(2)}–$${line.rateHigh.toFixed(2)} per ${line.unit === "sq ft" ? "sq ft" : "linear ft"}`;
+}
+
+function applyGroundedEvidence(lines: ScopeLine[], m: RoomDimensions, a: RoomAssessment, opts: ScopeEvidenceOptions) {
+  const f = a.architecturalFeatures ?? null;
+  const ceilingFt = m.ceilingHeightFt ?? a.suggestedDimensions?.ceilingHeightFt ?? null;
+  const badge = (model: EvidenceBadge["model"], detail: string): EvidenceBadge => ({ model, detail });
+  const samDoorsSeen = (opts.doorCounts ?? []).some((count) => typeof count === "number");
+  for (const line of lines) {
+    if (line.id === "walls") {
+      const parts: string[] = [];
+      if (a.visibleWallCount) parts.push(`${a.visibleWallCount} walls identified`);
+      if (f?.wallTexture === "smooth") parts.push("smooth drywall texture");
+      else if (f?.wallTexture === "textured") parts.push("textured wall finish");
+      parts.push(`${Math.round(m.wallArea)} sq ft net`);
+      line.evidenceBadge = badge("Muse Spark 1.3", parts.join(" · "));
+    } else if (line.id === "ceiling") {
+      if (f?.ceilingType === "vaulted_high") rescale(line, HIGH_CEILING_FACTOR);
+      const h = ceilingFt ? `${ceilingFt}ft` : "";
+      const detail = f?.ceilingType === "vaulted_high" ? `High or vaulted ceiling${h ? ` (${h})` : ""} · ladder/staging labor`
+        : f?.ceilingType === "textured" ? `Textured ${h} ceiling`.replace(/\s+/g, " ")
+        : `Standard ${h} flat ceiling`.replace(/\s+/g, " ");
+      line.evidenceBadge = badge("Muse Spark 1.3", detail);
+    } else if (line.id === "trim") {
+      if (f?.baseboardStyle === "tall_decorative") rescale(line, TALL_TRIM_FACTOR);
+      const style = f?.baseboardStyle === "tall_decorative" ? "tall decorative" : f?.baseboardStyle === "none" ? "no" : 'standard 4"';
+      const detail = `~${Math.round(line.quantity)} LF ${style} baseboards detected${f?.crownMoldingPresent ? " · crown molding" : ""}`;
+      line.evidenceBadge = badge(opts.trimDetected ? "Muse Spark + SAM 3.1" : "Muse Spark 1.3", detail);
+    } else if (line.id === "crown") {
+      line.evidenceBadge = badge("Muse Spark 1.3", `Crown molding detected along the wall-to-ceiling junction · ~${Math.round(line.quantity)} LF`);
+    } else if (line.id === "doors") {
+      const doors = a.visibleDoorCount ?? Math.round(line.quantity / 2);
+      line.evidenceBadge = samDoorsSeen
+        ? badge("Muse Spark + SAM 3.1", `${doors} floor-to-lintel door opening${doors === 1 ? "" : "s"} cross-checked by SAM 3.1`)
+        : badge("Muse Spark 1.3", `${doors} door opening${doors === 1 ? "" : "s"} seen`);
+    } else if (line.id === "patch") {
+      const marks = a.visibleMarkCount ?? line.quantity;
+      const prep = f?.prepNeeds?.length ? ` · ${f.prepNeeds.map((n) => n.replace(/_/g, " ")).join(", ")}` : "";
+      line.evidenceBadge = badge("Muse Spark 1.3", `${marks} visible mark${marks === 1 ? "" : "s"}${prep}`);
+    }
+  }
+}
+
+export interface InventoryEntry {
+  key: string;
+  label: string;
+  value: string;
+}
+
+const LABELS: Record<string, string> = {
+  standard: "Standard", tall_decorative: "Tall decorative", none: "None", unknown: "Not clear",
+  smooth: "Smooth", textured: "Textured",
+};
+
+export function architecturalInventory(features?: ArchitecturalFeatures | null, ceilingHeightFt?: number | null): InventoryEntry[] {
+  if (!features) return [];
+  const h = typeof ceilingHeightFt === "number" && ceilingHeightFt > 0 ? Math.round(ceilingHeightFt) : null;
+  const ceiling = features.ceilingType === "vaulted_high" ? `${h && h >= 10 ? h : 9}'+ High`
+    : features.ceilingType === "textured" ? `${h ? `${h}' ` : ""}Textured`
+    : features.ceilingType === "flat" ? `${h ? `${h}' ` : ""}Flat` : `${h ? `${h}' ` : ""}Standard`;
+  const entries: InventoryEntry[] = [
+    { key: "crown", label: "Crown molding", value: features.crownMoldingPresent ? "Detected" : "None" },
+    { key: "baseboards", label: "Baseboards", value: LABELS[features.baseboardStyle] ?? "Standard" },
+    { key: "ceiling", label: "Ceiling", value: ceiling },
+    { key: "walls", label: "Walls", value: LABELS[features.wallTexture] ?? "Not clear" },
+  ];
+  if (features.prepNeeds.length) entries.push({ key: "prep", label: "Prep", value: features.prepNeeds.map((n) => n.replace(/_/g, " ")).join(", ") });
+  return entries;
 }
 
 export function calculateTotals(items: ScopeLine[], selection: ScopeSelections): QuoteTotals {

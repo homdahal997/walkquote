@@ -14,6 +14,7 @@ const MAX_MASK_TEXT_CHARS = 1_800_000;
 const MAX_SEGMENTATION_BUNDLE_CHARS = 4_000_000;
 
 import { SURFACE_PROMPTS } from "./sam-concepts";
+import type { ArchitecturalFeatures, PrepNeed } from "@/types/estimate";
 
 const ROOM_IMAGES = {
   living: "https://ellprnxjjzatijdxcogk.supabase.co/storage/v1/render/image/public/files/chat-generated-images/project-clduq7bkofnka3ym75h8/3a6f75e7-594a-4065-befc-3787170e6102.webp?width=1200&resize=contain&quality=75",
@@ -132,6 +133,38 @@ interface RoomObservationResult {
     basis: string;
   };
   openingDeductionSqFt: number;
+  architecturalFeatures: ArchitecturalFeatures;
+}
+
+const BASEBOARD_STYLES = ["standard", "tall_decorative", "none", "unknown"] as const;
+const CASING_STYLES = ["standard", "wide_decorative", "cased_opening", "none"] as const;
+const CEILING_TYPES = ["flat", "textured", "vaulted_high", "standard"] as const;
+const WALL_TEXTURES = ["smooth", "textured", "unknown"] as const;
+const PREP_NEEDS: readonly PrepNeed[] = ["nail_holes", "scuffs", "trim_caulking", "furniture_masking"];
+
+function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  const key = typeof value === "string" ? value.trim().toLowerCase().replace(/[\s-]+/g, "_") : "";
+  return (allowed as readonly string[]).includes(key) ? key as T : fallback;
+}
+
+/** Sanitizes Muse Spark's trim, ceiling and prep inventory; never throws on malformed keys. */
+function parseArchitecturalFeatures(raw: unknown, visibleMarkCount: number | null, ceilingHeightFt: number | null): ArchitecturalFeatures {
+  const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const crown = source.crownMoldingPresent;
+  let ceilingType = pickEnum(source.ceilingType, CEILING_TYPES, "standard");
+  if (ceilingHeightFt !== null && ceilingHeightFt >= 10 && (ceilingType === "standard" || ceilingType === "flat")) ceilingType = "vaulted_high";
+  const prepNeeds = Array.isArray(source.prepNeeds)
+    ? [...new Set(source.prepNeeds.map((item) => pickEnum(item, PREP_NEEDS, "" as PrepNeed)).filter(Boolean))]
+    : [];
+  if ((visibleMarkCount ?? 0) > 0 && !prepNeeds.includes("scuffs") && !prepNeeds.includes("nail_holes")) prepNeeds.push("scuffs");
+  return {
+    crownMoldingPresent: crown === true || (typeof crown === "string" && /^(true|yes)$/i.test(crown.trim())),
+    baseboardStyle: pickEnum(source.baseboardStyle, BASEBOARD_STYLES, "standard"),
+    doorCasingStyle: pickEnum(source.doorCasingStyle, CASING_STYLES, "standard"),
+    ceilingType,
+    wallTexture: pickEnum(source.wallTexture, WALL_TEXTURES, "unknown"),
+    prepNeeds: prepNeeds.slice(0, 4),
+  };
 }
 
 const SCALE_ANCHORS: ScaleAnchor[] = ["standard_door", "light_switch", "outlet", "countertop", "furniture", "ceiling_height"];
@@ -263,6 +296,7 @@ function parseObservationJson(text: string, transcript = ""): RoomObservationRes
     scaleReference: "standard_door",
     suggestedDimensions: { lengthFt, widthFt, ceilingHeightFt, confidence: confident ? "medium" : "low", basis },
     openingDeductionSqFt: openingDeductionSqFt(visibleDoorCount ?? 1, visibleWindowCount ?? 0),
+    architecturalFeatures: parseArchitecturalFeatures(parsed.architecturalFeatures ?? parsed.architecture, visibleMarkCount, spoken.ceilingHeightFt ?? modelCeiling),
   };
 }
 
@@ -280,6 +314,14 @@ const OBSERVATION_JSON_SHAPE = `{
   "scaleReference": "standard_door | light_switch | outlet | countertop | furniture | ceiling_height",
   "dimensionConfidence": "low | medium",
   "suggestedDimensions": { "lengthFt": 14, "widthFt": 12, "ceilingHeightFt": 8 },
+  "architecturalFeatures": {
+    "crownMoldingPresent": false,
+    "baseboardStyle": "standard | tall_decorative | none | unknown",
+    "doorCasingStyle": "standard | wide_decorative | cased_opening | none",
+    "ceilingType": "flat | textured | vaulted_high | standard",
+    "wallTexture": "smooth | textured | unknown",
+    "prepNeeds": ["nail_holes | scuffs | trim_caulking | furniture_masking"]
+  },
   "observations": ["Light gray walls with white baseboards", "Two windows with blinds on one wall"]
 }`;
 
@@ -298,7 +340,8 @@ export function buildObservePrompt(transcript: string, sourceId: AnalysisSourceI
     "STEP 2 - DOORS vs WINDOWS: A DOOR (count it) reaches the floor: floor-to-lintel opening about 80 in tall, casing trim on both sides down to the floor, slab or panel door, knob/lever or hinges, or an open doorway/cased opening. Closet doors (bifold, sliding, hinged) count as doors. A WINDOW (count it) starts above the floor: raised sill/stool about 24-36 in up, glass panes, exterior daylight or outdoor view, blinds, shades, or curtains, sash locks. Glass sliding patio doors that reach the floor are doors. Mirrors, framed art, TVs, and cabinet doors are NEITHER. Count each unique door and window once across all views (the same window seen twice is one), and record which wall it is on.",
     "STEP 3 - SCALE AND SIZE: ALWAYS return suggestedDimensions with numbers, never null. Use visual anchors: interior door 80 in tall and 30-36 in wide, light switch 48 in to center, outlets 12-16 in, baseboard 4-6 in, countertop 36 in, queen bed 60x80 in, sofa about 84 in long, dining chair seat 18 in, ceilings usually 8 ft (9 ft in newer homes, higher if vaulted). Compare wall length to these objects and to the camera perspective, then estimate lengthFt (longer side), widthFt, and ceilingHeightFt to the nearest half foot. Set scaleReference to the strongest anchor you used (prefer standard_door when a door is visible). Use dimensionConfidence medium when a door, switch, or countertop anchors the scale, otherwise low. If scale is genuinely unclear, give the typical US size for the roomType (bedroom 12x12, primary bedroom 14x16, living room 14x18, kitchen 10x12, dining room 12x14, bathroom 5x8, office 10x11) with 8 ft ceiling.",
     "STEP 4 - SURFACE: wallTone is dark, medium, light, or unknown based only on wall color. visibleMarkCount counts visible scuffs, holes, cracks, or patches only. Never diagnose damage or its cause; do not mention mold, mildew, moisture, leaks, lead, asbestos, structural, electrical, plumbing, or hazards.",
-    "STEP 5 - OBSERVATIONS: 1-4 short strings (max 120 characters) about paint color, trim, openings, or surface marks that matter to a painter.",
+    "STEP 5 - ARCHITECTURE AND PREP (inspect like a painting estimator pricing labor): CROWN MOLDING - look at every wall-to-ceiling junction; crownMoldingPresent is true only if a profiled trim piece runs along that joint (a plain paint line is false). BASEBOARDS - compare baseboard height to outlets and door casing: about 3-4 in is standard, 5 in or taller or a multi-profile/cap board is tall_decorative, none if walls meet the floor bare, unknown if the floor line is hidden. DOOR CASING - standard flat or simple 2-3 in casing, wide_decorative for 4 in+ or built-up/headed casing, cased_opening for a trimmed doorway with no door slab, none if untrimmed. CEILING - flat or standard for a smooth level ceiling about 8-9 ft, textured for popcorn/knockdown/orange-peel, vaulted_high for sloped, cathedral, tray, or 10 ft+ ceilings. WALL TEXTURE - smooth drywall vs textured (orange-peel, knockdown, skip trowel) judged from light raking across the wall. PREP NEEDS - list only what is visible: nail_holes (picture hanger or nail holes), scuffs (marks, rub marks, dents), trim_caulking (open gaps or cracked caulk where trim meets wall), furniture_masking (furniture or fixtures that must be moved or masked).",
+    "STEP 6 - OBSERVATIONS: 1-4 short strings (max 120 characters) about paint color, trim, openings, or surface marks that matter to a painter.",
     homeowner ? "Do not invent details hidden outside the submitted views beyond the implied walls described in STEP 1." : "",
     noteContext,
     `OUTPUT: exactly this JSON shape with real values (integers for counts, numbers for feet): ${OBSERVATION_JSON_SHAPE}`,
