@@ -6,7 +6,7 @@ export type { RoomFrame } from "@/lib/room-media";
 export type RoomId = "living" | "bedroom";
 export type Screen = "setup" | "demo-inspector" | "capture" | "analysis" | "measurements" | "estimate" | "contact" | "complete";
 export type CaptureMode = "video" | "photos";
-export type ScopeId = "walls" | "ceiling" | "trim" | "crown" | "doors" | "patch" | "primer";
+export type ScopeId = "walls" | "ceiling" | "trim" | "crown" | "doors" | "patch" | "repair" | "primer";
 export type ScopeSelections = Partial<Record<ScopeId, boolean>>;
 export type AnalysisStatus = "pending" | "working" | "done" | "skipped" | "error";
 export type WallTone = "dark" | "medium" | "light" | "unknown";
@@ -58,8 +58,21 @@ export interface EvidenceBadge {
   detail: string;
 }
 
+export type SurfaceIssue = "peeling" | "water_stains" | "cracks" | "mildew";
+
+export interface SurfaceConditions {
+  issues: SurfaceIssue[];
+  /** Older-home cues or peeling paint: lead-safe testing advice applies. */
+  leadPaintCaution: boolean;
+}
+
+export type ConfidenceLineId = "walls" | "ceiling" | "trim" | "doors" | "patch";
+export type LineConfidence = Partial<Record<ConfidenceLineId, "high" | "low">>;
+
 export interface RoomAssessment {
   architecturalFeatures?: ArchitecturalFeatures | null;
+  surfaceConditions?: SurfaceConditions | null;
+  lineConfidence?: LineConfidence | null;
   visibleDoorCount: number | null;
   visibleWindowCount: number | null;
   visibleMarkCount: number | null;
@@ -84,6 +97,8 @@ export interface ScopeLine {
   required: boolean;
   defaultIncluded: boolean;
   evidenceBadge?: EvidenceBadge;
+  confidence?: "grounded" | "confirm_on_site";
+  confidenceNote?: string;
 }
 
 export interface QuoteTotals {
@@ -150,6 +165,8 @@ export interface AnalysisReply {
   roomType?: string;
   visibleWallCount?: number | null;
   architecturalFeatures?: ArchitecturalFeatures | null;
+  surfaceConditions?: SurfaceConditions | null;
+  lineConfidence?: LineConfidence | null;
   maskText?: string | null;
   frameMaskTexts?: Array<string | null>;
   primaryFrameIndex?: number;

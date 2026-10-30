@@ -1,4 +1,5 @@
-import type { ArchitecturalFeatures, EvidenceBadge, PaintColor, QuoteTotals, RoomAssessment, RoomDimensions, ScopeLine, ScopeSelections, WallTone } from "@/types/estimate";
+import type { ArchitecturalFeatures, EvidenceBadge, PaintColor, QuoteTotals, RoomAssessment, RoomDimensions, ScopeId, ScopeLine, ScopeSelections, SurfaceIssue, WallTone } from "@/types/estimate";
+import { doorCountConflict, spokenIntent } from "@/lib/estimator-insights";
 
 export const PRICE_BOOK = {
   walls: {
@@ -36,6 +37,12 @@ export const PRICE_BOOK = {
     rateHigh: 90,
     detailRateLabel: "$60–$90 each",
     summaryRateLabel: "$60–$90",
+  },
+  repair: {
+    rateLow: 75,
+    rateHigh: 175,
+    detailRateLabel: "$75–$175 per condition",
+    summaryRateLabel: "$75–$175",
   },
   primer: {
     rate: 0.5,
@@ -83,6 +90,7 @@ export function buildScopeLines(
   evidence: ScopeEvidenceOptions = {},
 ): ScopeLine[] {
   const lowered = note.toLowerCase();
+  const ceilingIntent = spokenIntent(note, "ceiling");
   const features = assessment?.architecturalFeatures ?? null;
   const lines: ScopeLine[] = [
     {
@@ -112,7 +120,7 @@ export function buildScopeLines(
       low: measurements.ceilingArea * PRICE_BOOK.ceiling.rateLow,
       high: measurements.ceilingArea * PRICE_BOOK.ceiling.rateHigh,
       required: false,
-      defaultIncluded: /\b(ceiling|overhead)\b/.test(lowered),
+      defaultIncluded: ceilingIntent === "include" || (ceilingIntent === null && /\boverhead\b/.test(lowered)),
     });
   }
 
@@ -128,7 +136,7 @@ export function buildScopeLines(
       low: measurements.trimLength * PRICE_BOOK.trim.rateLow,
       high: measurements.trimLength * PRICE_BOOK.trim.rateHigh,
       required: false,
-      defaultIncluded: /\b(trim|baseboard|molding|moulding)\b/.test(lowered),
+      defaultIncluded: spokenIntent(note, "trim") === "include",
     });
   }
 
@@ -144,7 +152,7 @@ export function buildScopeLines(
       low: measurements.doorSides * PRICE_BOOK.doors.rateLow,
       high: measurements.doorSides * PRICE_BOOK.doors.rateHigh,
       required: false,
-      defaultIncluded: mode === "demo" ? /\b(door|frame)\b/.test(lowered) : true,
+      defaultIncluded: mode === "demo" ? /\b(door|frame)\b/.test(lowered) : spokenIntent(note, "doors") !== "exclude",
     });
   }
 
@@ -161,6 +169,25 @@ export function buildScopeLines(
       high: measurements.patchCount * PRICE_BOOK.patch.rateHigh,
       required: false,
       defaultIncluded: mode === "demo" ? /\b(patch|repair|crack|dent|hole)\b/.test(lowered) : true,
+    });
+  }
+
+  const issues = assessment?.surfaceConditions?.issues ?? [];
+  if (issues.length) {
+    const named = issues.map((issue) => ISSUE_LABELS[issue]);
+    lines.push({
+      id: "repair",
+      label: "Surface condition repair allowance",
+      detail: `${named.join(", ")} · scrape, treat and seal before paint · ${PRICE_BOOK.repair.detailRateLabel}`,
+      quantity: issues.length,
+      unit: "condition",
+      rateLow: PRICE_BOOK.repair.rateLow,
+      rateHigh: PRICE_BOOK.repair.rateHigh,
+      low: issues.length * PRICE_BOOK.repair.rateLow,
+      high: issues.length * PRICE_BOOK.repair.rateHigh,
+      required: false,
+      defaultIncluded: true,
+      evidenceBadge: { model: "Muse Spark 1.3", detail: `Visible ${named.join(", ")} detected` },
     });
   }
 
@@ -199,7 +226,37 @@ export function buildScopeLines(
   }
 
   if (assessment && mode !== "demo") applyGroundedEvidence(lines, measurements, assessment, evidence);
-  return lines;
+  return assessment ? applyConfidence(lines, assessment, note, evidence) : lines;
+}
+
+export const ISSUE_LABELS: Record<SurfaceIssue, string> = {
+  peeling: "peeling paint",
+  water_stains: "water stains",
+  cracks: "cracks",
+  mildew: "mildew",
+};
+
+/** Marks each line Grounded or Confirm on site from Muse Spark's confidence, conditions and voice/vision checks. */
+function applyConfidence(lines: ScopeLine[], assessment: RoomAssessment, note: string, sam?: ScopeEvidenceOptions): ScopeLine[] {
+  const model = assessment.lineConfidence ?? {};
+  const features = assessment.architecturalFeatures ?? null;
+  const issues = assessment.surfaceConditions?.issues ?? [];
+  const samDoors = (sam?.doorCounts ?? []).filter((count): count is number => typeof count === "number");
+  const reasons: Partial<Record<ScopeId, string>> = {};
+  const flag = (id: ScopeId, reason: string) => { reasons[id] ??= reason; };
+  if (doorCountConflict(note, assessment, sam?.doorCounts)) flag("doors", "Your spoken door count differs from the camera");
+  if (samDoors.length && assessment.visibleDoorCount !== null && assessment.visibleDoorCount !== undefined && Math.max(...samDoors) !== assessment.visibleDoorCount) flag("doors", "Muse Spark and SAM 3.1 counted different doors");
+  if (issues.includes("water_stains")) flag("ceiling", "Water stains: check for an active leak first");
+  if (features?.ceilingType === "vaulted_high") flag("ceiling", "High ceiling height estimated from photos");
+  if (features?.baseboardStyle === "unknown") flag("trim", "Baseboards hidden in the photos");
+  if (features?.wallTexture === "unknown") flag("walls", "Wall texture not clear in the photos");
+  if (issues.some((issue) => issue !== "water_stains")) flag("walls", "Visible damage may hide more prep");
+  if (issues.includes("cracks")) flag("patch", "Cracks can run longer than visible");
+  flag("repair", "Hidden extent: painter verifies before final price");
+  for (const [id, level] of Object.entries(model)) if (level === "low") flag(id as ScopeId, "Muse Spark could not see this surface clearly");
+  return lines.map((item) => reasons[item.id]
+    ? { ...item, confidence: "confirm_on_site" as const, confidenceNote: reasons[item.id] }
+    : { ...item, confidence: "grounded" as const });
 }
 
 export interface ScopeEvidenceOptions {

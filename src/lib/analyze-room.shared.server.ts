@@ -14,7 +14,7 @@ const MAX_MASK_TEXT_CHARS = 1_800_000;
 const MAX_SEGMENTATION_BUNDLE_CHARS = 4_000_000;
 
 import { SURFACE_PROMPTS } from "./sam-concepts";
-import type { ArchitecturalFeatures, PrepNeed } from "@/types/estimate";
+import type { ArchitecturalFeatures, ConfidenceLineId, LineConfidence, PrepNeed, SurfaceConditions, SurfaceIssue } from "@/types/estimate";
 
 const ROOM_IMAGES = {
   living: "https://ellprnxjjzatijdxcogk.supabase.co/storage/v1/render/image/public/files/chat-generated-images/project-clduq7bkofnka3ym75h8/3a6f75e7-594a-4065-befc-3787170e6102.webp?width=1200&resize=contain&quality=75",
@@ -168,6 +168,39 @@ interface RoomObservationResult {
   };
   openingDeductionSqFt: number;
   architecturalFeatures: ArchitecturalFeatures;
+  surfaceConditions: SurfaceConditions;
+  lineConfidence: LineConfidence;
+}
+
+const SURFACE_ISSUES: readonly SurfaceIssue[] = ["peeling", "water_stains", "cracks", "mildew"];
+const CONFIDENCE_LINES: readonly ConfidenceLineId[] = ["walls", "ceiling", "trim", "doors", "patch"];
+
+function asRecord(raw: unknown): Record<string, unknown> {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+}
+
+function isTrue(value: unknown) {
+  return value === true || (typeof value === "string" && /^(true|yes)$/i.test(value.trim()));
+}
+
+/** Visible damage Muse Spark flagged; peeling or older-home cues raise the lead-safe caution. */
+function parseSurfaceConditions(raw: unknown): SurfaceConditions {
+  const source = asRecord(raw);
+  const issues = Array.isArray(source.issues)
+    ? [...new Set(source.issues.map((item) => pickEnum(item, SURFACE_ISSUES, "" as SurfaceIssue)).filter(Boolean))]
+    : [];
+  return { issues, leadPaintCaution: isTrue(source.olderHomeCues) || issues.includes("peeling") };
+}
+
+/** Muse Spark's own per-line confidence; unknown keys or values are dropped. */
+function parseLineConfidence(raw: unknown): LineConfidence {
+  const source = asRecord(raw);
+  const result: LineConfidence = {};
+  for (const key of CONFIDENCE_LINES) {
+    const value = typeof source[key] === "string" ? (source[key] as string).trim().toLowerCase() : "";
+    if (value === "high" || value === "low") result[key] = value;
+  }
+  return result;
 }
 
 const BASEBOARD_STYLES = ["standard", "tall_decorative", "none", "unknown"] as const;
@@ -331,6 +364,8 @@ function parseObservationJson(text: string, transcript = ""): RoomObservationRes
     suggestedDimensions: { lengthFt, widthFt, ceilingHeightFt, confidence: confident ? "medium" : "low", basis },
     openingDeductionSqFt: openingDeductionSqFt(visibleDoorCount ?? 1, visibleWindowCount ?? 0),
     architecturalFeatures: parseArchitecturalFeatures(parsed.architecturalFeatures ?? parsed.architecture, visibleMarkCount, spoken.ceilingHeightFt ?? modelCeiling),
+    surfaceConditions: parseSurfaceConditions(parsed.surfaceConditions),
+    lineConfidence: parseLineConfidence(parsed.lineConfidence),
   };
 }
 
@@ -356,6 +391,8 @@ const OBSERVATION_JSON_SHAPE = `{
     "wallTexture": "smooth | textured | unknown",
     "prepNeeds": ["nail_holes | scuffs | trim_caulking | furniture_masking"]
   },
+  "surfaceConditions": { "issues": ["peeling | water_stains | cracks | mildew"], "olderHomeCues": false },
+  "lineConfidence": { "walls": "high | low", "ceiling": "high | low", "trim": "high | low", "doors": "high | low", "patch": "high | low" },
   "observations": ["Light gray walls with white baseboards", "Two windows with blinds on one wall"]
 }`;
 
@@ -375,7 +412,8 @@ export function buildObservePrompt(transcript: string, sourceId: AnalysisSourceI
     "STEP 3 - SCALE AND SIZE: ALWAYS return suggestedDimensions with numbers, never null. Use visual anchors: interior door 80 in tall and 30-36 in wide, light switch 48 in to center, outlets 12-16 in, baseboard 4-6 in, countertop 36 in, queen bed 60x80 in, sofa about 84 in long, dining chair seat 18 in, ceilings usually 8 ft (9 ft in newer homes, higher if vaulted). Compare wall length to these objects and to the camera perspective, then estimate lengthFt (longer side), widthFt, and ceilingHeightFt to the nearest half foot. Set scaleReference to the strongest anchor you used (prefer standard_door when a door is visible). Use dimensionConfidence medium when a door, switch, or countertop anchors the scale, otherwise low. If scale is genuinely unclear, give the typical US size for the roomType (bedroom 12x12, primary bedroom 14x16, living room 14x18, kitchen 10x12, dining room 12x14, bathroom 5x8, office 10x11) with 8 ft ceiling.",
     "STEP 4 - SURFACE: wallTone is dark, medium, light, or unknown based only on wall color. visibleMarkCount counts visible scuffs, holes, cracks, or patches only. Never diagnose damage or its cause; do not mention mold, mildew, moisture, leaks, lead, asbestos, structural, electrical, plumbing, or hazards.",
     "STEP 5 - ARCHITECTURE AND PREP (inspect like a painting estimator pricing labor): CROWN MOLDING - look at every wall-to-ceiling junction; crownMoldingPresent is true only if a profiled trim piece runs along that joint (a plain paint line is false). BASEBOARDS - compare baseboard height to outlets and door casing: about 3-4 in is standard, 5 in or taller or a multi-profile/cap board is tall_decorative, none if walls meet the floor bare, unknown if the floor line is hidden. DOOR CASING - standard flat or simple 2-3 in casing, wide_decorative for 4 in+ or built-up/headed casing, cased_opening for a trimmed doorway with no door slab, none if untrimmed. CEILING - flat or standard for a smooth level ceiling about 8-9 ft, textured for popcorn/knockdown/orange-peel, vaulted_high for sloped, cathedral, tray, or 10 ft+ ceilings. WALL TEXTURE - smooth drywall vs textured (orange-peel, knockdown, skip trowel) judged from light raking across the wall. PREP NEEDS - list only what is visible: nail_holes (picture hanger or nail holes), scuffs (marks, rub marks, dents), trim_caulking (open gaps or cracked caulk where trim meets wall), furniture_masking (furniture or fixtures that must be moved or masked).",
-    "STEP 6 - OBSERVATIONS: 1-4 short strings (max 120 characters) about paint color, trim, openings, or surface marks that matter to a painter.",
+    "STEP 6 - CONDITIONS AND CONFIDENCE: surfaceConditions.issues lists only damage you can actually see: peeling (flaking, lifting, or bubbling paint), water_stains (yellow-brown rings or tide marks, often on ceilings), cracks (hairline or settlement cracks in drywall or plaster, open corner seams), mildew (gray-black spotting, usually near windows or in bathrooms). olderHomeCues is true only for visible signs of an older home: plaster walls, original wood windows with many paint layers, radiators, or thick alligatored paint. lineConfidence: rate each line high when the photos clearly show that surface, low when it is hidden, cropped, blurry, in shadow, or partly blocked by furniture. If the homeowner's note states door or window counts that differ from the photos, still report what you see and never copy counts from the note.",
+    "STEP 7 - OBSERVATIONS: 1-4 short strings (max 120 characters) about paint color, trim, openings, or surface marks that matter to a painter.",
     homeowner ? "Do not invent details hidden outside the submitted views beyond the implied walls described in STEP 1." : "",
     noteContext,
     `OUTPUT: exactly this JSON shape with real values (integers for counts, numbers for feet): ${OBSERVATION_JSON_SHAPE}`,

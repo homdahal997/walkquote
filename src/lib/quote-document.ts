@@ -16,6 +16,8 @@ export interface QuoteDocRoom {
   windows: number;
   lines: QuoteDocLine[];
   specs?: string[];
+  siteChecks?: string[];
+  materials?: string[];
   taxLow: number;
   taxHigh: number;
   low: number;
@@ -71,6 +73,8 @@ export function quoteHtml(doc: QuoteDocument) {
         <tr class="muted"><td>Tax &amp; consumables (${PRICE_BOOK.taxAndConsumables.label})</td><td class="num">${moneyRange(room.taxLow, room.taxHigh)}</td></tr>
         <tr class="total"><td>${compact ? `${escapeHtml(room.label)} total` : "Room total"}</td><td class="num">${moneyRange(room.low, room.high)}</td></tr>
       </table>
+      ${room.siteChecks?.length ? `<div class="extra"><h3>Site checks</h3><ul>${room.siteChecks.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("")}</ul></div>` : ""}
+      ${room.materials?.length ? `<div class="extra"><h3>Materials</h3><ul>${room.materials.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("")}</ul></div>` : ""}
     </section>`).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(quoteFileName(doc).replace(/\.pdf$/, ""))}</title>
 <style>
@@ -93,6 +97,8 @@ table { width: 100%; border-collapse: collapse; }
 td { padding: 4px 0; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
 .specs { margin: 4px 0 2px; color: #334155; font: 10px Helvetica, Arial, sans-serif; }
 .evidence { color: #047857; font: 9.5px Helvetica, Arial, sans-serif; }
+.extra h3 { margin: 8px 0 2px; font: bold 9.5px Helvetica, Arial, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.extra ul { margin: 0; padding-left: 16px; color: #334155; font: 10px Helvetica, Arial, sans-serif; }
 td small { color: #64748b; font-family: Helvetica, Arial, sans-serif; }
 .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .muted td { color: #64748b; }
@@ -201,6 +207,20 @@ export async function downloadQuotePdf(doc: QuoteDocument) {
         pdf.text(pdfSafe(`- AI Evidence: ${evidence}`), margin, y);
       }
       y += compact ? 13 : 16;
+    }
+    for (const [title, entries] of [["Site checks", room.siteChecks], ["Materials", room.materials]] as const) {
+      if (!entries?.length || y > pageHeight - margin - notesHeight - 20) continue;
+      pdf.setFont("helvetica", "bold").setFontSize(8).setTextColor(15, 23, 42);
+      pdf.text(title.toUpperCase(), margin, y);
+      y += 10;
+      pdf.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(51, 65, 85);
+      for (const entry of entries) {
+        if (y > pageHeight - margin - notesHeight) break;
+        const wrapped = pdf.splitTextToSize(pdfSafe(`- ${entry}`), right - margin) as string[];
+        pdf.text(wrapped, margin, y);
+        y += wrapped.length * 9 + 1;
+      }
+      y += 4;
     }
     y += 6;
   }
