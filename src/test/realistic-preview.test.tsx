@@ -72,6 +72,13 @@ describe("Muse Image request", () => {
     expect(await runAnalyzeRoom({ ...renderBody, frames: [jpeg] }, "1.2.3.4", { skipQuota: true })).toEqual({ error: "Invalid request." });
     expect(await runAnalyzeRoom({ ...renderBody, sourceId: "living" }, "1.2.3.4", { skipQuota: true })).toEqual({ error: "Invalid request." });
   });
+
+  it("returns a structured code when the Meta key is missing", async () => {
+    vi.stubEnv("META_MODEL_API_KEY", "");
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const reply = await runAnalyzeRoom(renderBody, "1.2.3.4", { skipQuota: true });
+    expect(reply).toMatchObject({ errorCode: "SERVICE_UNCONFIGURED" });
+  });
 });
 
 describe("realistic preview controls", () => {

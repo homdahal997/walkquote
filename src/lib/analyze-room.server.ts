@@ -47,14 +47,14 @@ export interface AnalyzeInput {
 }
 
 class GatewayError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(readonly status: number, message: string, readonly code?: string) {
     super(message);
   }
 }
 
 function apiKey() {
   const key = process.env["META_MODEL_API_KEY"];
-  if (!key) throw new GatewayError(503, "The room analysis service is not configured.");
+  if (!key) throw new GatewayError(503, "The room analysis service is not configured.", "SERVICE_UNCONFIGURED");
   return key;
 }
 
@@ -274,15 +274,30 @@ function quotaReply(reason: "VISITOR_DAILY_LIMIT" | "SITE_DAILY_LIMIT") {
 
 /** Reserves one stage of one attempt against the per-visitor and site-wide daily limits. */
 async function reserveStage(visitorAddress: string, attemptId: string, stage: Stage) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  let supabaseAdmin: typeof import("@/integrations/supabase/client.server").supabaseAdmin;
+  try {
+    ({ supabaseAdmin } = await import("@/integrations/supabase/client.server"));
+  } catch {
+    return { error: "The estimate service is not set up yet. The demo walkthrough still works.", errorCode: "SERVICE_UNCONFIGURED", message: "The estimate service is not set up yet. The demo walkthrough still works." };
+  }
   const visitorHash = await sha256Hex(`walkquote-visitor:${visitorAddress}`);
   const day = new Date().toISOString().slice(0, 10);
 
-  const { data: existing } = await supabaseAdmin
-    .from("analysis_usage")
-    .select("attempt_id, visitor_hash, stage")
-    .eq("day", day);
-  const rows = existing ?? [];
+  let rows: Array<{ attempt_id: string; visitor_hash: string; stage: string }> = [];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("analysis_usage")
+      .select("attempt_id, visitor_hash, stage")
+      .eq("day", day);
+    if (error) throw error;
+    rows = data ?? [];
+  } catch {
+    return { error: "The estimate service cannot safely start right now. Try again in a little while.", errorCode: "USAGE_LIMIT_UNAVAILABLE", message: "The estimate service cannot safely start right now. Try again in a little while." };
+  }
+  const isKnownStage = rows.some((row) => row.attempt_id === attemptId && row.stage === stage);
+  // A lost response can leave a stage reserved: the client resends the same attemptId+stage,
+  // so treat that as the in-flight run instead of an error and stop it burning a daily run.
+  if (isKnownStage) return { resumed: true as const };
   const isKnownAttempt = rows.some((row) => row.attempt_id === attemptId);
   if (stage.startsWith("render-")) {
     // Previews belong to an analysed room: they never start a new estimate run, and are capped per run.
@@ -300,10 +315,15 @@ async function reserveStage(visitorAddress: string, attemptId: string, stage: St
     .from("analysis_usage")
     .insert({ day, visitor_hash: visitorHash, attempt_id: attemptId, stage });
   if (error) {
-    if (error.code === "23505") return { error: "This analysis step was already used. Start a new estimate.", errorCode: "STAGE_ALREADY_USED" };
-    throw error;
+    // Concurrent resubmission of the same attempt + stage resumes the in-flight run.
+    if (error.code === "23505") return { resumed: true as const };
+    return { error: "The estimate service cannot safely start right now. Try again in a little while.", errorCode: "USAGE_LIMIT_UNAVAILABLE", message: "The estimate service cannot safely start right now. Try again in a little while." };
   }
   return null;
+}
+
+function isQuotaBlock(value: unknown): value is { error: string; errorCode: string; message?: string; resetsAt?: string } {
+  return typeof value === "object" && value !== null && "errorCode" in value;
 }
 
 /** Frees a stage reservation after a model failure so the same attempt can retry that stage. */
@@ -357,11 +377,20 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
   // Guests: 3 estimate runs per visitor per UTC day, 25 site-wide. Each run's stages count once.
   if (!options.skipQuota) {
     const quota = await reserveStage(visitorAddress, attemptId, stage);
-    if (quota) return quota;
+    if (quota && isQuotaBlock(quota)) return quota;
   }
 
   try {
-    if (stage === "transcribe") return { transcript: await transcribe(audio as Uint8Array) };
+    if (stage === "transcribe") {
+      try {
+        return { transcript: await transcribe(audio as Uint8Array) };
+      } catch (error) {
+        if (error instanceof GatewayError && error.code === "SERVICE_UNCONFIGURED") {
+          return { error: "The room analysis service is not set up yet. The demo walkthrough still works.", errorCode: "SERVICE_UNCONFIGURED" };
+        }
+        throw error;
+      }
+    }
     if (stage === "observe") {
       const imageUrls = sourceId === "homeowner" ? frames : [ROOM_IMAGES[sourceId]];
       return { ...(await observe(imageUrls, transcript, sourceId)) };
@@ -421,6 +450,7 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
   } catch (error) {
     console.error("analyze-room stage failed", { stage, sourceId, error });
     if (!options.skipQuota) await releaseStage(visitorAddress, attemptId, stage);
+    if (error instanceof GatewayError && error.code) return { error: error.message, errorCode: error.code };
     const message = error instanceof GatewayError ? error.message : "Room analysis did not finish. Please retry.";
     return { error: message };
   }
@@ -434,13 +464,14 @@ async function runRender(body: AnalyzeInput, visitorAddress: string, options: { 
   const stage: Stage = `render-${request.renderId}`;
   if (!options.skipQuota) {
     const quota = await reserveStage(visitorAddress, attemptId, stage);
-    if (quota) return quota;
+    if (quota && isQuotaBlock(quota)) return quota;
   }
   try {
     return await renderWalls(request.frame, request.colorName, request.colorHex, request.size);
   } catch (error) {
     console.error("analyze-room render failed", { error });
     if (!options.skipQuota) await releaseStage(visitorAddress, attemptId, stage);
+    if (error instanceof GatewayError && error.code) return { error: error.message, errorCode: error.code };
     return { error: error instanceof GatewayError ? error.message : "The realistic preview did not finish. Please retry." };
   }
 }

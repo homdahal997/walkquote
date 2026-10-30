@@ -889,9 +889,9 @@ export function HomeownerWizard() {
             setTranscript(noteForAnalysis);
             setAnalysisStep(0, spoken ? "done" : noteForAnalysis ? "done" : "skipped");
           } catch (voiceError) {
-            // Daily-limit and attempt errors must still stop the run.
+            // Daily-limit, render-limit, config and attempt errors must still stop the run.
             const code = voiceError instanceof AnalysisStageError ? voiceError.code : null;
-            if (code && /LIMIT|USAGE|ATTEMPT|STAGE_ALREADY/.test(code)) throw voiceError;
+            if (code && /LIMIT|RENDER_|SERVICE_UNCONFIGURED|ATTEMPT|STAGE_ALREADY/.test(code)) throw voiceError;
             const detail = voiceError instanceof Error ? voiceError.message : String(voiceError);
             console.warn("Voice note skipped:", detail, audioToTranscribe.type, audioToTranscribe.size);
             setTranscript(noteForAnalysis);
@@ -1038,8 +1038,12 @@ export function HomeownerWizard() {
       setScreen((mode as string) === "demo" ? "measurements" : suggested ? "estimate" : "measurements");
     } catch (caught) {
       const stageError = caught instanceof AnalysisStageError ? caught : null;
-      // Daily limits cannot be retried; a used or rejected attempt retries with a fresh one.
-      setAnalysisRetryable(!/LIMIT|USAGE/.test(stageError?.code ?? ""));
+      // Only true limit blocks hide Retry: daily caps and the per-room preview cap.
+      // Transient store hiccups (USAGE_LIMIT_UNAVAILABLE) stay retryable, and a used
+      // or rejected attempt retries with a fresh one.
+      const limitCode = stageError?.code ?? "";
+      const isLimitBlock = /VISITOR_DAILY_LIMIT|SITE_DAILY_LIMIT|RENDER_LIMIT|RENDER_NEEDS_ANALYSIS/.test(limitCode);
+      setAnalysisRetryable(!isLimitBlock);
       if (stageError?.code && /STAGE_ALREADY|ATTEMPT/.test(stageError.code)) analysisResumeRef.current = null;
       setAnalysisStep(activeStep, "error");
       setCurrentAnalysisStep(activeStep);
@@ -1052,12 +1056,18 @@ export function HomeownerWizard() {
           : stageError?.code === "USAGE_IDENTITY_UNAVAILABLE"
             ? "We could not safely verify this connection's daily estimate limit, so analysis did not start. Try again later."
             : stageError?.code === "USAGE_LIMIT_UNAVAILABLE"
-              ? "The estimate service cannot safely start right now. Try again in a little while."
-              : stageError?.code === "STAGE_ALREADY_USED"
-                ? "This analysis stage was already submitted. Tap Retry Analysis to start a fresh run with the same frames."
-                : stageError?.code === "ATTEMPT_INVALID"
-                  ? "This analysis attempt could not be verified. Tap Retry Analysis to start a fresh run with the same frames."
-                  : null;
+              ? "The estimate service cannot safely start right now. Tap Retry Analysis to try again in a little while."
+              : stageError?.code === "SERVICE_UNCONFIGURED"
+                ? "The room analysis service is not set up yet. Try the demo walkthrough, or ask the contractor to enable live analysis."
+                : stageError?.code === "RENDER_LIMIT"
+                  ? "This room already has 6 realistic previews. The color tint preview still works for other colors."
+                  : stageError?.code === "RENDER_NEEDS_ANALYSIS"
+                    ? "Analyze the room before asking for a realistic preview."
+                    : stageError?.code === "STAGE_ALREADY_USED"
+                      ? "This analysis stage was already submitted. Tap Start fresh analysis for a new run with the same frames."
+                      : stageError?.code === "ATTEMPT_INVALID"
+                        ? "This analysis attempt could not be verified. Tap Start fresh analysis for a new run with the same frames."
+                        : null;
       setAnalysisError(serviceMessage ?? (!stageError
         ? "The analysis service could not be reached. Check your connection and try again in a minute."
         : stageError.message && !stageError.code
@@ -1615,6 +1625,7 @@ export function HomeownerWizard() {
       maskUnavailable={maskUnavailable}
       modelTrace={mode === "homeowner" ? modelTrace : undefined}
       onRetryAnalysis={mode === "homeowner" && analysisRetryable ? () => void startAnalysis(true) : undefined}
+      retryLabel={analysisErrorCode && /STAGE_ALREADY|ATTEMPT/.test(analysisErrorCode) ? "Start fresh analysis" : "Retry Analysis"}
       onBackToCapture={() => setScreen("capture")}
     />
   );
