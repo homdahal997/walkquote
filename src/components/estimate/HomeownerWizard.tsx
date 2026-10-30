@@ -13,6 +13,7 @@ import { buildQuoteDocument, type QuoteDocRoom } from "@/lib/quote-document";
 import { baseboardLengthFt, crossCheckOpeningCount, roomTypeName, openingDeductionSqFt as computeOpeningDeduction } from "@/lib/room-sizes";
 import { analyzeRoom } from "@/functions";
 import type { AnalyzeRoomRequest, AnalysisSourceId } from "@/functions";
+import type { RenderSource } from "@/components/estimate/RealisticPreview";
 import {
   audioBlobToWavBase64,
   beginAudioNoteCapture,
@@ -216,6 +217,7 @@ export function HomeownerWizard() {
   const [voiceFailed, setVoiceFailed] = useState(false);
   const [analysisRetryable, setAnalysisRetryable] = useState(false);
   const analysisResumeRef = useRef<{ attemptId: string; frameDataUrls: string[]; note: string; voiceSettled: boolean } | null>(null);
+  const [renderSource, setRenderSource] = useState<RenderSource | null>(null);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisErrorCode, setAnalysisErrorCode] = useState<string | null>(null);
   const [analysisBusy, setAnalysisBusy] = useState(false);
@@ -846,6 +848,7 @@ export function HomeownerWizard() {
     setTrimMask(null);
     setOpeningMask(null);
     setMaskUnavailable(false);
+    setRenderSource(null);
     setFrameWallMasks([]);
     setSamOpeningCounts({ doors: [], windows: [] });
     setObservations([]);
@@ -936,6 +939,7 @@ export function HomeownerWizard() {
         architecturalFeatures: observationResult.architecturalFeatures && typeof observationResult.architecturalFeatures === "object" ? observationResult.architecturalFeatures : null,
       };
       setAssessment(nextAssessment);
+      if (mode === "homeowner") setRenderSource({ attemptId, frameDataUrls });
       setAnalysisStep(1, "done");
 
       activeStep = 2;
@@ -974,6 +978,7 @@ export function HomeownerWizard() {
         setTrimMask(null);
         setOpeningMask(null);
         setMaskUnavailable(true);
+        setRenderSource(null);
         setFrameWallMasks([]);
         setSamOpeningCounts({ doors: [], windows: [] });
         setAnalysisStep(2, "skipped");
@@ -1107,6 +1112,7 @@ export function HomeownerWizard() {
     setTrimMask(null);
     setOpeningMask(null);
     setMaskUnavailable(false);
+    setRenderSource(null);
     setFrameWallMasks([]);
     setSamOpeningCounts({ doors: [], windows: [] });
     setAnalysisStatuses(["pending", "pending", "pending", "pending"]);
@@ -1693,6 +1699,7 @@ export function HomeownerWizard() {
     },
     quoteActions: mode === "homeowner" ? <QuoteShareButtons getDocument={getQuoteDocument} tone="dark" /> : null,
     frameWallMasks,
+    renderSource,
     openingChecks: mode === "homeowner" ? {
       doors: crossCheckOpeningCount(assessment.visibleDoorCount, samOpeningCounts.doors),
       windows: crossCheckOpeningCount(assessment.visibleWindowCount, samOpeningCounts.windows),
