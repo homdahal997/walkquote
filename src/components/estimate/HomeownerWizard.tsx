@@ -981,7 +981,7 @@ export function HomeownerWizard() {
         setTrimMask(null);
         setOpeningMask(null);
         setMaskUnavailable(true);
-        setRenderSource(null);
+        // Muse Image still repaints the walls without a SAM outline; keep the realistic preview available.
         setFrameWallMasks([]);
         setSamOpeningCounts({ doors: [], windows: [] });
         setAnalysisStep(2, "skipped");

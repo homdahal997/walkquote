@@ -695,9 +695,15 @@ export async function audioBlobToWavBase64(blob: Blob): Promise<string> {
       if (maybe && typeof (maybe as Promise<AudioBuffer>).then === "function") (maybe as Promise<AudioBuffer>).then(resolve, reject);
     });
   } catch {
-    throw new Error("audio-decode-failed");
-  } finally {
     await context.close().catch(() => undefined);
+    // Video containers (MOV/MP4 on iOS) often refuse decodeAudioData; play the soundtrack instead.
+    if (blob.type.startsWith("video/") || blob.type === "" || blob.type.includes("mp4") || blob.type.includes("quicktime")) {
+      decoded = await captureVideoSoundtrack(blob);
+    } else {
+      throw new Error("audio-decode-failed");
+    }
+  } finally {
+    if (context.state !== "closed") await context.close().catch(() => undefined);
   }
 
   if (decoded.duration <= 0) {
@@ -753,6 +759,72 @@ export async function audioBlobToWavBase64(blob: Blob): Promise<string> {
   const wav = new Uint8Array(buffer);
   if (wav.byteLength > 2_900_000) throw new Error("audio-size-invalid");
   return blobToBase64(new Blob([wav], { type: "audio/wav" }));
+}
+
+/** Plays a video silently through Web Audio (2x speed) and records its soundtrack as PCM. */
+async function captureVideoSoundtrack(blob: Blob): Promise<AudioBuffer> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const AudioCtor: typeof AudioContext = window.AudioContext ?? (window as any).webkitAudioContext;
+  const context = new AudioCtor();
+  const url = URL.createObjectURL(blob);
+  const video = document.createElement("video");
+  video.src = url;
+  video.playsInline = true;
+  video.preload = "auto";
+  const rate = 2;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (video as any).preservesPitch = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (video as any).webkitPreservesPitch = false;
+  const chunks: Float32Array[] = [];
+  try {
+    if (context.state === "suspended") await context.resume().catch(() => undefined);
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error("audio-decode-failed"));
+      window.setTimeout(() => reject(new Error("audio-decode-failed")), 10_000);
+    });
+    const source = context.createMediaElementSource(video);
+    const processor = context.createScriptProcessor(4096, 2, 1);
+    const sink = context.createGain();
+    sink.gain.value = 0; // keeps the graph running without making sound
+    processor.onaudioprocess = (event) => {
+      const input = event.inputBuffer;
+      const mono = new Float32Array(input.length);
+      for (let c = 0; c < input.numberOfChannels; c += 1) {
+        const data = input.getChannelData(c);
+        for (let i = 0; i < data.length; i += 1) mono[i] += data[i] / input.numberOfChannels;
+      }
+      chunks.push(mono);
+    };
+    source.connect(processor);
+    processor.connect(sink);
+    sink.connect(context.destination);
+    video.playbackRate = rate;
+    const limitMs = (Math.min(video.duration || MAX_CAPTURED_VIDEO_SECONDS, MAX_CAPTURED_VIDEO_SECONDS) / rate) * 1000 + 1500;
+    await video.play();
+    await new Promise<void>((resolve) => {
+      video.onended = () => resolve();
+      window.setTimeout(resolve, limitMs);
+    });
+    video.pause();
+    processor.disconnect();
+    source.disconnect();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  const total = chunks.reduce((sum, c) => sum + c.length, 0);
+  const effectiveRate = Math.round(context.sampleRate / rate);
+  await context.close().catch(() => undefined);
+  let peak = 0;
+  chunks.forEach((c) => c.forEach((v) => { if (Math.abs(v) > peak) peak = Math.abs(v); }));
+  if (!total || peak < 0.001) throw new Error("audio-track-silent");
+  const OfflineCtor: typeof OfflineAudioContext = window.OfflineAudioContext ?? (window as any).webkitOfflineAudioContext; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const buffer = new OfflineCtor(1, total, effectiveRate).createBuffer(1, total, effectiveRate);
+  const out = buffer.getChannelData(0);
+  let offset = 0;
+  chunks.forEach((c) => { out.set(c, offset); offset += c.length; });
+  return buffer;
 }
 
 export function revokeMediaUrl(url?: string | null) {
