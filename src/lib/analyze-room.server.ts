@@ -23,6 +23,7 @@ const SEGMENT_MODEL = "sam-3.1";
 const TRANSCRIBE_MODEL = "muse-voice-transcribe-1.0";
 const RENDER_MODEL = "muse-image-1.0";
 const MAX_RENDERS_PER_ATTEMPT = 6;
+const RESEND_WINDOW_MS = 2 * 60 * 1000;
 const MAX_RENDER_BASE64_CHARS = 8_000_000;
 const VISITOR_DAILY_LIMIT = 3;
 const SITE_DAILY_LIMIT = 25;
