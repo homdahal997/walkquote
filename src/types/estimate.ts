@@ -158,6 +158,8 @@ export interface AnalysisReply {
   trimMaskText?: string | null;
   openingMaskText?: string | null;
   segmentationUnavailable?: string[];
+  renderImage?: string;
+  renderModel?: string;
 }
 
 export interface UsageDiagnosticReply {
