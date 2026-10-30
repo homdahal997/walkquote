@@ -45,6 +45,7 @@ import { RoomCapture } from "@/components/estimate/RoomCapture";
 import { SampleDemoInspector } from "@/components/estimate/SampleDemoInspector";
 import {
   bestBudgetFit,
+  architecturalInventory,
   buildScopeLines,
   calculateTotals,
   itemIsIncluded,
@@ -361,8 +362,8 @@ export function HomeownerWizard() {
   }, [mode, sampleRoomId, roomShape, measurementFields, doorScopeSelected, patchScopeSelected, estimateSource, assessment.scaleReference, assessment.openingDeductionSqFt, assessment.visibleDoorCount, manualWallAreaOverride, wallAreaEditing, wallAreaDraft]);
 
   const items = useMemo(
-    () => dimensions ? buildScopeLines(dimensions, color, (mode as string) === "demo" && sampleRoom?.darkWalls ? "dark" : assessment.wallTone, transcript, mode) : [],
-    [dimensions, color, mode, sampleRoom, assessment.wallTone, transcript],
+    () => dimensions ? buildScopeLines(dimensions, color, (mode as string) === "demo" && sampleRoom?.darkWalls ? "dark" : assessment.wallTone, transcript, mode, assessment, { trimDetected: Boolean(trimMask), doorCounts: samOpeningCounts.doors }) : [],
+    [dimensions, color, mode, sampleRoom, assessment, transcript, trimMask, samOpeningCounts.doors],
   );
   const totals = useMemo(() => calculateTotals(items, scopeSelection), [items, scopeSelection]);
   const includedItems = useMemo(() => items.filter((item) => itemIsIncluded(item, scopeSelection)), [items, scopeSelection]);
@@ -932,6 +933,7 @@ export function HomeownerWizard() {
         openingDeductionSqFt: suggested ? clampArea(observationResult.openingDeductionSqFt) : null,
         roomType: typeof observationResult.roomType === "string" ? observationResult.roomType : undefined,
         visibleWallCount: clampCount(observationResult.visibleWallCount, 12),
+        architecturalFeatures: observationResult.architecturalFeatures && typeof observationResult.architecturalFeatures === "object" ? observationResult.architecturalFeatures : null,
       };
       setAssessment(nextAssessment);
       setAnalysisStep(1, "done");
@@ -1631,7 +1633,8 @@ export function HomeownerWizard() {
       wallArea: dimensions.wallArea,
       doors: assessment.visibleDoorCount ?? 0,
       windows: assessment.visibleWindowCount ?? 0,
-      lines: includedItems.map((item) => ({ label: item.label, detail: item.detail, low: item.low, high: item.high })),
+      lines: includedItems.map((item) => ({ label: item.label, detail: item.detail, low: item.low, high: item.high, ...(item.evidenceBadge ? { evidence: `${item.evidenceBadge.model} — ${item.evidenceBadge.detail}` } : {}) })),
+      specs: architecturalInventory(assessment.architecturalFeatures, dimensions.ceilingHeightFt).map((entry) => `${entry.label}: ${entry.value}`),
       taxLow: totals.taxLow,
       taxHigh: totals.taxHigh,
       low: totals.low,

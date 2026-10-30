@@ -11,6 +11,8 @@ import {
 } from "@/lib/room-sizes";
 import { buildObservePrompt, countSamBoxes, parseObservationJson, spokenDimensions } from "@/lib/analyze-room.shared.server";
 import { selectDistinctKeyframes, type KeyframeCandidate } from "@/lib/room-media";
+import { architecturalInventory, buildScopeLines } from "@/lib/pricing";
+import type { RoomAssessment, RoomDimensions } from "@/types/estimate";
 
 describe("wall area math", () => {
   it("computes gross, deduction, and net areas", () => {
@@ -74,6 +76,77 @@ describe("parseObservationJson", () => {
     expect(prompt).toMatch(/STEP 1 - WALLS/);
     expect(prompt).toMatch(/DOORS vs WINDOWS/);
     expect(prompt).toMatch(/ALWAYS return suggestedDimensions/);
+  });
+});
+
+describe("architectural features", () => {
+  it("extracts and sanitizes trim, ceiling and prep inventory", () => {
+    const result = parseObservationJson(JSON.stringify({
+      visibleMarkCount: 0,
+      suggestedDimensions: { lengthFt: 12, widthFt: 14, ceilingHeightFt: 8 },
+      architecturalFeatures: { crownMoldingPresent: true, baseboardStyle: "Tall Decorative", doorCasingStyle: "cased-opening", ceilingType: "textured", wallTexture: "smooth", prepNeeds: ["nail_holes", "nail_holes", "bogus", 7, "trim_caulking"] },
+    }));
+    expect(result.architecturalFeatures).toEqual({
+      crownMoldingPresent: true,
+      baseboardStyle: "tall_decorative",
+      doorCasingStyle: "cased_opening",
+      ceilingType: "textured",
+      wallTexture: "smooth",
+      prepNeeds: ["nail_holes", "trim_caulking"],
+    });
+  });
+
+  it("falls back to safe standard values when keys are absent or malformed", () => {
+    expect(parseObservationJson('{"roomType":"bedroom"}').architecturalFeatures).toEqual({
+      crownMoldingPresent: false, baseboardStyle: "standard", doorCasingStyle: "standard", ceilingType: "standard", wallTexture: "unknown", prepNeeds: [],
+    });
+    const malformed = parseObservationJson('{"visibleMarkCount":2,"suggestedDimensions":{"lengthFt":12,"widthFt":12,"ceilingHeightFt":11},"architecturalFeatures":{"crownMoldingPresent":"maybe","baseboardStyle":42,"prepNeeds":"scuffs"}}');
+    expect(malformed.architecturalFeatures).toMatchObject({ crownMoldingPresent: false, baseboardStyle: "standard", ceilingType: "vaulted_high", prepNeeds: ["scuffs"] });
+    expect(parseObservationJson('{"architecturalFeatures":[1,2]}').architecturalFeatures.baseboardStyle).toBe("standard");
+  });
+
+  it("asks Muse Spark to inspect crown, baseboards, casing, ceiling and prep", () => {
+    const prompt = buildObservePrompt("", "homeowner");
+    expect(prompt).toMatch(/CROWN MOLDING/);
+    expect(prompt).toMatch(/tall_decorative/);
+    expect(prompt).toMatch(/vaulted_high/);
+    expect(prompt).toMatch(/nail_holes/);
+  });
+});
+
+describe("grounded scope evidence", () => {
+  const dims: RoomDimensions = { roomShape: "rectangular", lengthFt: 14, widthFt: 12, ceilingHeightFt: 8, grossWallArea: 416, openingDeductionSqFt: 50, wallArea: 366, ceilingArea: 168, trimLength: 49, perimeterFt: 52, doorSides: 2, patchCount: 2 };
+  const assessment: RoomAssessment = {
+    visibleDoorCount: 2, visibleWindowCount: 1, visibleMarkCount: 2, wallTone: "light", scaleReference: "standard_door", suggestedDimensions: null, openingDeductionSqFt: 50, visibleWallCount: 4,
+    architecturalFeatures: { crownMoldingPresent: true, baseboardStyle: "standard", doorCasingStyle: "standard", ceilingType: "flat", wallTexture: "smooth", prepNeeds: ["scuffs"] },
+  };
+  const color = { name: "White", hex: "#ffffff" };
+
+  it("attaches Meta model evidence badges to each line", () => {
+    const lines = buildScopeLines(dims, color, "light", "", "homeowner", assessment, { trimDetected: true, doorCounts: [1, 1, null] });
+    const byId = Object.fromEntries(lines.map((line) => [line.id, line]));
+    expect(byId.walls.evidenceBadge).toEqual({ model: "Muse Spark 1.3", detail: "4 walls identified · smooth drywall texture · 366 sq ft net" });
+    expect(byId.ceiling.evidenceBadge?.detail).toBe("Standard 8ft flat ceiling");
+    expect(byId.trim.evidenceBadge).toMatchObject({ model: "Muse Spark + SAM 3.1" });
+    expect(byId.trim.evidenceBadge?.detail).toMatch(/~49 LF standard 4" baseboards detected · crown molding/);
+    expect(byId.doors.evidenceBadge?.detail).toMatch(/2 floor-to-lintel door openings cross-checked by SAM 3.1/);
+    expect(byId.patch.evidenceBadge?.detail).toMatch(/2 visible marks · scuffs/);
+    expect(byId.crown).toMatchObject({ required: false, defaultIncluded: true, quantity: 52 });
+  });
+
+  it("adjusts labor for tall trim and high ceilings, and keeps legacy output without an assessment", () => {
+    const tall = buildScopeLines(dims, color, "light", "", "homeowner", { ...assessment, architecturalFeatures: { ...assessment.architecturalFeatures!, baseboardStyle: "tall_decorative", ceilingType: "vaulted_high", crownMoldingPresent: false } });
+    expect(tall.find((line) => line.id === "trim")?.rateHigh).toBe(6.25);
+    expect(tall.find((line) => line.id === "ceiling")?.rateLow).toBe(1.95);
+    expect(tall.some((line) => line.id === "crown")).toBe(false);
+    const legacy = buildScopeLines(dims, color, "light", "", "homeowner");
+    expect(legacy.every((line) => !line.evidenceBadge)).toBe(true);
+    expect(legacy.find((line) => line.id === "walls")?.rateLow).toBe(2);
+  });
+
+  it("summarizes the architectural inventory", () => {
+    expect(architecturalInventory(assessment.architecturalFeatures, 8).map((entry) => entry.value).slice(0, 4)).toEqual(["Detected", "Standard", "8' Flat", "Smooth"]);
+    expect(architecturalInventory(null)).toEqual([]);
   });
 });
 

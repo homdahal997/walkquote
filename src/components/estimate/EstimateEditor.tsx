@@ -22,6 +22,7 @@ import { BeforeAfterSlider } from "@/components/estimate/BeforeAfterSlider";
 import { CapturedFrameViewer } from "@/components/estimate/AnalysisProgress";
 import type { SampleRoom } from "@/components/estimate/SampleDemoInspector";
 import {
+  architecturalInventory,
   budgetStatusLabel,
   itemIsIncluded,
   money,
@@ -59,7 +60,35 @@ import type {
   ScopeLine,
   ScopeSelections,
   QuoteTotals,
+  ArchitecturalFeatures,
+  EvidenceBadge,
 } from "@/types/estimate";
+
+function EvidencePill({ id, badge }: { id: string; badge: EvidenceBadge }) {
+  return (
+    <p data-testid={`scope-evidence-${id}`} className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-lg border border-emerald-700/30 bg-slate-900 px-2.5 py-1.5 text-xs leading-4 text-slate-200">
+      <Sparkles size={12} className="mt-0.5 shrink-0 text-emerald-400" aria-hidden="true" />
+      <span><span className="font-semibold text-emerald-300">Meta AI Evidence: {badge.model}</span> — {badge.detail}</span>
+    </p>
+  );
+}
+
+function ArchitecturalInventoryRow({ features, ceilingHeightFt, testId }: { features?: ArchitecturalFeatures | null; ceilingHeightFt?: number; testId: string }) {
+  const entries = architecturalInventory(features, ceilingHeightFt);
+  if (!entries.length) return null;
+  return (
+    <div data-testid={testId} className="mt-4">
+      <p className="text-xs font-bold uppercase tracking-[0.13em] text-slate-500">Architectural inventory · Muse Spark 1.3</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {entries.map((entry) => (
+          <span key={entry.key} data-testid={`${testId}-${entry.key}`} className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1 text-xs text-slate-700">
+            <span className="text-slate-500">{entry.label}:</span> <strong className="font-semibold text-slate-900">{entry.value}</strong>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export interface EstimateEditorMeasurementFields {
   lengthFt: string;
@@ -488,6 +517,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
                   <div className="rounded-xl bg-slate-50 p-3"><dt className="text-slate-500">Windows seen</dt><dd className="mt-1 flex items-center gap-2 text-lg font-semibold tabular-nums text-slate-950"><button type="button" aria-label="Fewer windows" onClick={() => onAdjustCount?.("visibleWindowCount", -1)} className="h-9 w-9 rounded-lg border border-slate-300 bg-white">−</button><span className="min-w-6 text-center">{assessment.visibleWindowCount ?? 0}</span><button type="button" aria-label="More windows" onClick={() => onAdjustCount?.("visibleWindowCount", 1)} className="h-9 w-9 rounded-lg border border-slate-300 bg-white">+</button></dd></div>
                   <div className="col-span-2 rounded-xl bg-slate-50 p-3"><dt className="text-slate-500">Surface marks to inspect</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-slate-950">{assessment.visibleMarkCount ?? "Not clear"}</dd></div>
                 </dl>
+                <ArchitecturalInventoryRow features={assessment.architecturalFeatures} ceilingHeightFt={assessment.suggestedDimensions?.ceilingHeightFt} testId="architectural-inventory-review" />
                 <p className="mt-4 text-sm leading-6 text-slate-600">Tap − or + to fix a count; the door and window deduction updates automatically. These are visual observations only. WalkQuote does not diagnose stains, moisture, lead, mold, or structural problems.</p>
               </div>
             </aside>
@@ -653,7 +683,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
               return <div key={item.id} className={`flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between ${included ? "" : "opacity-65"}`}>
                 <div className="flex min-w-0 items-start gap-3">
                   {item.required ? <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-800"><Check size={14} /></span> : <button type="button" aria-pressed={included} aria-label={`${included ? "Remove" : "Include"} ${item.label}`} onClick={() => toggleScope(item)} className={`grid min-h-11 min-w-11 shrink-0 place-items-center rounded-xl border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${included ? "border-teal-800 bg-teal-800 text-white" : "border-slate-400 bg-white text-transparent hover:border-teal-700"}`}>{included && <Check size={14} aria-hidden="true" />}</button>}
-                  <div><strong className="text-base text-slate-950">{item.label}</strong><p className="mt-1 text-sm leading-5 text-slate-600">{item.detail}</p></div>
+                  <div><strong className="text-base text-slate-950">{item.label}</strong><p className="mt-1 text-sm leading-5 text-slate-600">{item.detail}</p>{item.evidenceBadge && <EvidencePill id={item.id} badge={item.evidenceBadge} />}</div>
                 </div>
                 <div className="pl-9 text-left sm:pl-0 sm:text-right"><strong className="block text-base font-semibold tabular-nums text-slate-950">{included ? moneyRange(item.low, item.high) : "Not included"}</strong><small className="mt-1 block text-sm text-slate-500">{item.required ? "Required baseline" : included ? `Remove to save up to ${money(item.high * (1 + PRICE_BOOK.taxAndConsumables.rate))}` : `Add ${moneyRange(item.low, item.high)}`}</small></div>
               </div>;
@@ -673,6 +703,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
           </div>
           <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-teal-50 text-teal-800"><Sparkles size={19} /></span><div><p className="text-xs font-bold uppercase tracking-[0.13em] text-slate-500">Visible observations</p><h3 className="text-lg font-semibold text-slate-950">What the frames show</h3></div></div>
+            <ArchitecturalInventoryRow features={assessment.architecturalFeatures} ceilingHeightFt={assessment.suggestedDimensions?.ceilingHeightFt} testId="architectural-inventory" />
             {observations.length ? <ul className="mt-4 space-y-2">{observations.map((observation, index) => <li key={`${observation}-${index}`} className="flex gap-2 text-sm leading-6 text-slate-700"><span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-teal-700" />{observation}</li>)}</ul> : <p className="mt-4 text-sm leading-6 text-slate-600">No confident visual observations returned. The contractor can review the submitted media.</p>}
             {transcript && <div className="mt-4 rounded-xl bg-slate-50 p-4"><span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Room note</span><p className="mt-2 text-sm leading-6 text-slate-800">“{transcript}”</p></div>}
             <p className="mt-4 text-sm leading-5 text-slate-500">Visual marks are not damage, moisture, lead, or mold diagnoses.</p>
@@ -683,6 +714,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
               <div className="flex justify-between gap-3"><dt>Walls · two coats</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.walls.summaryRateLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt>Ceiling</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.ceiling.summaryRateLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt>Trim</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.trim.summaryRateLabel}</dd></div>
+              <div className="flex justify-between gap-3"><dt>Crown molding</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.crown.summaryRateLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt>Door side</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.doors.summaryRateLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt>Minor patch</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.patch.summaryRateLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt>Dark-to-light primer</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.primer.summaryRateLabel}</dd></div>

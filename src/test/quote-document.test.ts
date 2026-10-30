@@ -73,6 +73,22 @@ describe("printable quote", () => {
     expect(pdfCalls.texts.some((text) => text.includes("$794 - $993"))).toBe(true);
     expect(pdfCalls.texts.every((text) => !/[^\x00-\xff]/.test(text))).toBe(true);
   });
+
+  it("prints AI evidence and room specifications in the PDF and HTML", async () => {
+    const graded: QuoteDocRoom = {
+      ...room("Bedroom", 794, 993),
+      specs: ["Crown molding: Detected", "Baseboards: Tall decorative", "Ceiling: 9'+ High", "Prep: scuffs"],
+      lines: [{ label: "Crown molding painting · recommended", detail: "52 linear ft · $3.50–$5.00 per linear ft", low: 182, high: 260, evidence: "Muse Spark 1.3 — Crown molding detected along the wall-to-ceiling junction · ~52 LF" }],
+    };
+    pdfCalls.texts.length = 0;
+    await expect(downloadQuotePdf(doc([graded]))).resolves.toBeUndefined();
+    expect(pdfCalls.texts.some((text) => text.includes("AI Evidence: Muse Spark 1.3 - Crown molding"))).toBe(true);
+    expect(pdfCalls.texts.some((text) => text.includes("Room specifications: Crown molding: Detected"))).toBe(true);
+    expect(pdfCalls.texts.every((text) => !/[^\x00-\xff]/.test(text))).toBe(true);
+    const html = quoteHtml(doc([graded]));
+    expect(html).toContain("AI Evidence: Muse Spark 1.3");
+    expect(html).toContain("Baseboards: Tall decorative");
+  });
 });
 
 describe("baseboard length", () => {

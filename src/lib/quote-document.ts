@@ -5,6 +5,7 @@ export interface QuoteDocLine {
   detail: string;
   low: number;
   high: number;
+  evidence?: string;
 }
 
 export interface QuoteDocRoom {
@@ -14,6 +15,7 @@ export interface QuoteDocRoom {
   doors: number;
   windows: number;
   lines: QuoteDocLine[];
+  specs?: string[];
   taxLow: number;
   taxHigh: number;
   low: number;
@@ -63,8 +65,9 @@ export function quoteHtml(doc: QuoteDocument) {
   const rooms = doc.rooms.map((room) => `
     <section class="room">
       <div class="room-head"><h2>${escapeHtml(room.label)}</h2><span>${escapeHtml(room.sizeLabel)} · ${Math.round(room.wallArea)} sq ft walls · ${room.doors} door${room.doors === 1 ? "" : "s"}, ${room.windows} window${room.windows === 1 ? "" : "s"}</span></div>
+      ${room.specs?.length ? `<p class="specs">${room.specs.map(escapeHtml).join(" · ")}</p>` : ""}
       <table>
-        ${room.lines.map((line) => `<tr><td><strong>${escapeHtml(line.label)}</strong>${compact ? "" : `<br><small>${escapeHtml(line.detail)}</small>`}</td><td class="num">${moneyRange(line.low, line.high)}</td></tr>`).join("")}
+        ${room.lines.map((line) => `<tr><td><strong>${escapeHtml(line.label)}</strong>${compact ? "" : `<br><small>${escapeHtml(line.detail)}</small>`}${line.evidence ? `<br><span class="evidence">&bull; AI Evidence: ${escapeHtml(line.evidence)}</span>` : ""}</td><td class="num">${moneyRange(line.low, line.high)}</td></tr>`).join("")}
         <tr class="muted"><td>Tax &amp; consumables (${PRICE_BOOK.taxAndConsumables.label})</td><td class="num">${moneyRange(room.taxLow, room.taxHigh)}</td></tr>
         <tr class="total"><td>${compact ? `${escapeHtml(room.label)} total` : "Room total"}</td><td class="num">${moneyRange(room.low, room.high)}</td></tr>
       </table>
@@ -88,6 +91,8 @@ header p { margin: 2px 0 0; color: #475569; font-family: Helvetica, Arial, sans-
 .room-head span { color: #475569; font: 10.5px Helvetica, Arial, sans-serif; }
 table { width: 100%; border-collapse: collapse; }
 td { padding: 4px 0; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.specs { margin: 4px 0 2px; color: #334155; font: 10px Helvetica, Arial, sans-serif; }
+.evidence { color: #047857; font: 9.5px Helvetica, Arial, sans-serif; }
 td small { color: #64748b; font-family: Helvetica, Arial, sans-serif; }
 .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .muted td { color: #64748b; }
@@ -169,12 +174,18 @@ export async function downloadQuotePdf(doc: QuoteDocument) {
     y += 5;
     pdf.setDrawColor(203, 213, 225).setLineWidth(0.6).line(margin, y, right, y);
     y += 13;
-    const rows: Array<[string, string, string, boolean]> = [
-      ...room.lines.map((line): [string, string, string, boolean] => [line.label, compact ? "" : line.detail, moneyRange(line.low, line.high), false]),
-      [`Tax & consumables (${PRICE_BOOK.taxAndConsumables.label})`, "", moneyRange(room.taxLow, room.taxHigh), false],
-      [compact ? `${room.label} total` : "Room total", "", moneyRange(room.low, room.high), true],
+    if (room.specs?.length) {
+      pdf.setFont("helvetica", "normal").setFontSize(8).setTextColor(51, 65, 85);
+      const specLines = pdf.splitTextToSize(pdfSafe(`Room specifications: ${room.specs.join(" | ")}`), right - margin) as string[];
+      pdf.text(specLines, margin, y);
+      y += specLines.length * 10 + 4;
+    }
+    const rows: Array<[string, string, string, boolean, string]> = [
+      ...room.lines.map((line): [string, string, string, boolean, string] => [line.label, compact ? "" : line.detail, moneyRange(line.low, line.high), false, line.evidence ?? ""]),
+      [`Tax & consumables (${PRICE_BOOK.taxAndConsumables.label})`, "", moneyRange(room.taxLow, room.taxHigh), false, ""],
+      [compact ? `${room.label} total` : "Room total", "", moneyRange(room.low, room.high), true, ""],
     ];
-    for (const [label, detail, amount, total] of rows) {
+    for (const [label, detail, amount, total, evidence] of rows) {
       if (y > pageHeight - margin - notesHeight) break;
       pdf.setFont("helvetica", total ? "bold" : "normal").setFontSize(body).setTextColor(15, 23, 42);
       pdf.text(label, margin, y);
@@ -183,6 +194,11 @@ export async function downloadQuotePdf(doc: QuoteDocument) {
         y += 11;
         pdf.setFontSize(8).setTextColor(100, 116, 139);
         pdf.text(detail, margin, y);
+      }
+      if (evidence) {
+        y += 10;
+        pdf.setFontSize(7.5).setTextColor(4, 120, 87);
+        pdf.text(pdfSafe(`- AI Evidence: ${evidence}`), margin, y);
       }
       y += compact ? 13 : 16;
     }

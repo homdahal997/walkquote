@@ -6,7 +6,7 @@ export type { RoomFrame } from "@/lib/room-media";
 export type RoomId = "living" | "bedroom";
 export type Screen = "setup" | "demo-inspector" | "capture" | "analysis" | "measurements" | "estimate" | "contact" | "complete";
 export type CaptureMode = "video" | "photos";
-export type ScopeId = "walls" | "ceiling" | "trim" | "doors" | "patch" | "primer";
+export type ScopeId = "walls" | "ceiling" | "trim" | "crown" | "doors" | "patch" | "primer";
 export type ScopeSelections = Partial<Record<ScopeId, boolean>>;
 export type AnalysisStatus = "pending" | "working" | "done" | "skipped" | "error";
 export type WallTone = "dark" | "medium" | "light" | "unknown";
@@ -42,7 +42,24 @@ export interface SuggestedDimensions {
   basis: string;
 }
 
+export type PrepNeed = "nail_holes" | "scuffs" | "trim_caulking" | "furniture_masking";
+
+export interface ArchitecturalFeatures {
+  crownMoldingPresent: boolean;
+  baseboardStyle: "standard" | "tall_decorative" | "none" | "unknown";
+  doorCasingStyle: "standard" | "wide_decorative" | "cased_opening" | "none";
+  ceilingType: "flat" | "textured" | "vaulted_high" | "standard";
+  wallTexture: "smooth" | "textured" | "unknown";
+  prepNeeds: PrepNeed[];
+}
+
+export interface EvidenceBadge {
+  model: "Muse Spark 1.3" | "SAM 3.1" | "Muse Spark + SAM 3.1";
+  detail: string;
+}
+
 export interface RoomAssessment {
+  architecturalFeatures?: ArchitecturalFeatures | null;
   visibleDoorCount: number | null;
   visibleWindowCount: number | null;
   visibleMarkCount: number | null;
@@ -66,6 +83,7 @@ export interface ScopeLine {
   high: number;
   required: boolean;
   defaultIncluded: boolean;
+  evidenceBadge?: EvidenceBadge;
 }
 
 export interface QuoteTotals {
@@ -131,6 +149,7 @@ export interface AnalysisReply {
   openingDeductionSqFt?: number | null;
   roomType?: string;
   visibleWallCount?: number | null;
+  architecturalFeatures?: ArchitecturalFeatures | null;
   maskText?: string | null;
   frameMaskTexts?: Array<string | null>;
   primaryFrameIndex?: number;
