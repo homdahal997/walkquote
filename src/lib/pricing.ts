@@ -37,6 +37,12 @@ export const PRICE_BOOK = {
     detailRateLabel: "$60–$90 each",
     summaryRateLabel: "$60–$90",
   },
+  repair: {
+    rateLow: 75,
+    rateHigh: 175,
+    detailRateLabel: "$75–$175 per condition",
+    summaryRateLabel: "$75–$175",
+  },
   primer: {
     rate: 0.5,
     detailRateLabel: "+$0.50 per sq ft",
@@ -83,6 +89,7 @@ export function buildScopeLines(
   evidence: ScopeEvidenceOptions = {},
 ): ScopeLine[] {
   const lowered = note.toLowerCase();
+  const ceilingIntent = spokenIntent(note, "ceiling");
   const features = assessment?.architecturalFeatures ?? null;
   const lines: ScopeLine[] = [
     {

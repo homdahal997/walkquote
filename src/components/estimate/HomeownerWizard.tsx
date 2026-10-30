@@ -14,6 +14,7 @@ import { baseboardLengthFt, crossCheckOpeningCount, roomTypeName, openingDeducti
 import { analyzeRoom } from "@/functions";
 import type { AnalyzeRoomRequest, AnalysisSourceId } from "@/functions";
 import type { RenderSource } from "@/components/estimate/RealisticPreview";
+import { materialsSummary, materialsTakeoff, reconcileVoiceVision, siteChecks } from "@/lib/estimator-insights";
 import {
   audioBlobToWavBase64,
   beginAudioNoteCapture,
@@ -937,6 +938,8 @@ export function HomeownerWizard() {
         roomType: typeof observationResult.roomType === "string" ? observationResult.roomType : undefined,
         visibleWallCount: clampCount(observationResult.visibleWallCount, 12),
         architecturalFeatures: observationResult.architecturalFeatures && typeof observationResult.architecturalFeatures === "object" ? observationResult.architecturalFeatures : null,
+        surfaceConditions: observationResult.surfaceConditions && typeof observationResult.surfaceConditions === "object" ? observationResult.surfaceConditions : null,
+        lineConfidence: observationResult.lineConfidence && typeof observationResult.lineConfidence === "object" ? observationResult.lineConfidence : null,
       };
       setAssessment(nextAssessment);
       if (mode === "homeowner") setRenderSource({ attemptId, frameDataUrls });
@@ -1639,8 +1642,10 @@ export function HomeownerWizard() {
       wallArea: dimensions.wallArea,
       doors: assessment.visibleDoorCount ?? 0,
       windows: assessment.visibleWindowCount ?? 0,
-      lines: includedItems.map((item) => ({ label: item.label, detail: item.detail, low: item.low, high: item.high, ...(item.evidenceBadge ? { evidence: `${item.evidenceBadge.model} — ${item.evidenceBadge.detail}` } : {}) })),
+      lines: includedItems.map((item) => ({ label: item.label, detail: item.detail, low: item.low, high: item.high, ...(item.evidenceBadge ? { evidence: `${item.evidenceBadge.model} — ${item.evidenceBadge.detail}${item.confidence === "confirm_on_site" ? ` · Confirm on site: ${item.confidenceNote}` : item.confidence === "grounded" ? " · Grounded" : ""}` } : {}) })),
       specs: architecturalInventory(assessment.architecturalFeatures, dimensions.ceilingHeightFt).map((entry) => `${entry.label}: ${entry.value}`),
+      siteChecks: siteChecks(assessment, includedItems, reconcileVoiceVision(transcript, assessment, samOpeningCounts)),
+      materials: materialsSummary(materialsTakeoff(includedItems, assessment)),
       taxLow: totals.taxLow,
       taxHigh: totals.taxHigh,
       low: totals.low,
@@ -1700,6 +1705,7 @@ export function HomeownerWizard() {
     quoteActions: mode === "homeowner" ? <QuoteShareButtons getDocument={getQuoteDocument} tone="dark" /> : null,
     frameWallMasks,
     renderSource,
+    samOpeningCounts,
     openingChecks: mode === "homeowner" ? {
       doors: crossCheckOpeningCount(assessment.visibleDoorCount, samOpeningCounts.doors),
       windows: crossCheckOpeningCount(assessment.visibleWindowCount, samOpeningCounts.windows),

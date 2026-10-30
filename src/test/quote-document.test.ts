@@ -89,6 +89,23 @@ describe("printable quote", () => {
     expect(html).toContain("AI Evidence: Muse Spark 1.3");
     expect(html).toContain("Baseboards: Tall decorative");
   });
+
+  it("prints site checks and the materials takeoff", async () => {
+    const graded: QuoteDocRoom = {
+      ...room("Bedroom", 794, 993),
+      siteChecks: ["Water stains seen by Muse Spark 1.3", "Confirm on site · Ceiling painting: Water stains: check for an active leak first"],
+      materials: ["Walls: Premium interior latex, eggshell · 2 coats · ~2.25 gal (buy 3 gal)", "Primer: Stain-blocking primer (spot) (1 qt)"],
+    };
+    pdfCalls.texts.length = 0;
+    await expect(downloadQuotePdf(doc([graded]))).resolves.toBeUndefined();
+    expect(pdfCalls.texts).toContain("SITE CHECKS");
+    expect(pdfCalls.texts).toContain("MATERIALS");
+    expect(pdfCalls.texts.some((text) => text.includes("~2.25 gal (buy 3 gal)"))).toBe(true);
+    expect(pdfCalls.texts.every((text) => !/[^\x00-\xff]/.test(text))).toBe(true);
+    const html = quoteHtml(doc([graded]));
+    expect(html).toContain("<h3>Site checks</h3>");
+    expect(html).toContain("Stain-blocking primer");
+  });
 });
 
 describe("baseboard length", () => {

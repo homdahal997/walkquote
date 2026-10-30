@@ -149,6 +149,7 @@ export interface EstimateEditorState {
   patchScopeSelected: boolean;
   frameWallMasks?: Array<MaskData | null>;
   renderSource?: RenderSource | null;
+  samOpeningCounts?: { doors: Array<number | null>; windows: Array<number | null> };
   openingChecks?: { doors: OpeningCrossCheck; windows: OpeningCrossCheck };
 }
 
@@ -405,6 +406,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
     frameWallMasks,
     openingChecks,
     renderSource,
+    samOpeningCounts,
   } = state;
   const maskForFrame = (index: number) => (index === primaryFrameIndex ? mask : frameWallMasks?.[index] ?? null);
   // When the primary view has no wall mask, open the preview on the first view that has one.
@@ -716,7 +718,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
               return <div key={item.id} className={`flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between ${included ? "" : "opacity-65"}`}>
                 <div className="flex min-w-0 items-start gap-3">
                   {item.required ? <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-800"><Check size={14} /></span> : <button type="button" aria-pressed={included} aria-label={`${included ? "Remove" : "Include"} ${item.label}`} onClick={() => toggleScope(item)} className={`grid min-h-11 min-w-11 shrink-0 place-items-center rounded-xl border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${included ? "border-teal-800 bg-teal-800 text-white" : "border-slate-400 bg-white text-transparent hover:border-teal-700"}`}>{included && <Check size={14} aria-hidden="true" />}</button>}
-                  <div><strong className="text-base text-slate-950">{item.label}</strong><p className="mt-1 text-sm leading-5 text-slate-600">{item.detail}</p>{item.evidenceBadge && <EvidencePill id={item.id} badge={item.evidenceBadge} />}</div>
+                  <div><strong className="text-base text-slate-950">{item.label}</strong><p className="mt-1 text-sm leading-5 text-slate-600">{item.detail}</p>{item.evidenceBadge && <EvidencePill id={item.id} badge={item.evidenceBadge} />}<ConfidenceChip item={item} /></div>
                 </div>
                 <div className="pl-9 text-left sm:pl-0 sm:text-right"><strong className="block text-base font-semibold tabular-nums text-slate-950">{included ? moneyRange(item.low, item.high) : "Not included"}</strong><small className="mt-1 block text-sm text-slate-500">{item.required ? "Required baseline" : included ? `Remove to save up to ${money(item.high * (1 + PRICE_BOOK.taxAndConsumables.rate))}` : `Add ${moneyRange(item.low, item.high)}`}</small></div>
               </div>;
@@ -741,6 +743,9 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
             {transcript && <div className="mt-4 rounded-xl bg-slate-50 p-4"><span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Room note</span><p className="mt-2 text-sm leading-6 text-slate-800">“{transcript}”</p></div>}
             <p className="mt-4 text-sm leading-5 text-slate-500">Visual marks are not damage, moisture, lead, or mold diagnoses.</p>
           </div>
+          <SiteChecksCard assessment={assessment} includedItems={includedItems} />
+          {mode === "homeowner" && <VoiceVisionCard transcript={transcript} assessment={assessment} sam={samOpeningCounts} />}
+          <MaterialsCard includedItems={includedItems} assessment={assessment} />
           <div className="rounded-[1.8rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-800"><ClipboardList size={19} /></span><div><p className="text-xs font-bold uppercase tracking-[0.13em] text-slate-500">Price source</p><h3 className="text-lg font-semibold text-slate-950">Supplied painting price book</h3></div></div>
             <dl className="mt-4 space-y-2 text-sm text-slate-700">
@@ -750,6 +755,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
               <div className="flex justify-between gap-3"><dt>Crown molding</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.crown.summaryRateLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt>Door side</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.doors.summaryRateLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt>Minor patch</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.patch.summaryRateLabel}</dd></div>
+              <div className="flex justify-between gap-3"><dt>Condition repair</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.repair.summaryRateLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt>Dark-to-light primer</dt><dd className="font-semibold tabular-nums">{PRICE_BOOK.primer.summaryRateLabel}</dd></div>
             </dl>
           </div>
