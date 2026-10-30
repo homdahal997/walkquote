@@ -19,6 +19,8 @@ import {
   Sparkles,
   } from "lucide-react";
 import { BeforeAfterSlider } from "@/components/estimate/BeforeAfterSlider";
+import { MuseImageCard } from "@/components/estimate/ModelInspector";
+import { RealisticPreviewControls, useRealisticPreview, type RenderSource } from "@/components/estimate/RealisticPreview";
 import { CapturedFrameViewer } from "@/components/estimate/AnalysisProgress";
 import type { SampleRoom } from "@/components/estimate/SampleDemoInspector";
 import {
@@ -146,6 +148,7 @@ export interface EstimateEditorState {
   doorScopeSelected: boolean;
   patchScopeSelected: boolean;
   frameWallMasks?: Array<MaskData | null>;
+  renderSource?: RenderSource | null;
   openingChecks?: { doors: OpeningCrossCheck; windows: OpeningCrossCheck };
 }
 
@@ -239,6 +242,7 @@ function WallTintPreview({
   split,
   onSplit,
   demo = false,
+  overlayUrl = null,
 }: {
   imageUrl: string;
   imageAlt: string;
@@ -247,6 +251,7 @@ function WallTintPreview({
   split: number;
   onSplit: (value: number) => void;
   demo?: boolean;
+  overlayUrl?: string | null;
 }) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -316,7 +321,18 @@ function WallTintPreview({
             onError={() => setImageReady(false)}
             className="pointer-events-none block h-auto w-full select-none"
           />
-          {mask && imageReady && (
+          {mask && imageReady && overlayUrl && (
+            <img
+              src={overlayUrl}
+              alt=""
+              data-testid="realistic-preview-overlay"
+              draggable={false}
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              style={{ clipPath: `inset(0 0 0 ${split}%)` } as CSSProperties}
+              aria-hidden="true"
+            />
+          )}
+          {mask && imageReady && !overlayUrl && (
             <canvas
               ref={canvasRef}
               className="pointer-events-none absolute inset-0 h-full w-full"
@@ -326,7 +342,7 @@ function WallTintPreview({
           )}
           <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-between gap-3 text-xs font-bold uppercase tracking-[0.12em] text-white drop-shadow">
             <span className="rounded-full bg-slate-950/70 px-3 py-1.5">{mask ? "Original Room" : demo ? "Demo room" : "Original room photo"}</span>
-            <span className="rounded-full bg-slate-950/70 px-3 py-1.5">{mask ? "Color Preview" : "Actual submitted image"}</span>
+            <span className="rounded-full bg-slate-950/70 px-3 py-1.5">{mask ? (overlayUrl ? "Realistic · Muse Image" : "Color Preview") : "Actual submitted image"}</span>
           </div>
         </>
       </BeforeAfterSlider>
@@ -388,6 +404,7 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
     patchScopeSelected,
     frameWallMasks,
     openingChecks,
+    renderSource,
   } = state;
   const maskForFrame = (index: number) => (index === primaryFrameIndex ? mask : frameWallMasks?.[index] ?? null);
   // When the primary view has no wall mask, open the preview on the first view that has one.
@@ -399,6 +416,9 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
   const showFramePicker = mode === "homeowner" && activeRoomFrames.length > 1 && activeRoomFrames.some((_, index) => index !== primaryFrameIndex && maskForFrame(index));
   const previewMask = maskForFrame(previewIndex) ?? mask;
   const previewImageUrl = maskForFrame(previewIndex) ? activeRoomFrames[previewIndex]?.previewUrl ?? primaryImageUrl : primaryImageUrl;
+  const previewFrameIndex = maskForFrame(previewIndex) ? previewIndex : primaryFrameIndex;
+  const realistic = useRealisticPreview({ source: mode === "homeowner" ? renderSource : null, frameIndex: previewFrameIndex, originalUrl: previewImageUrl, mask: previewMask, color });
+  const realisticState = realistic.state;
   const {
     onScreenChange,
     backFromEstimate,
@@ -622,7 +642,20 @@ export function EstimateEditor({ screen, motionProps, reduceMotion, state, handl
             <div><p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-800">05 · Wall color preview</p><h2 id="preview-heading" className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{mode === "demo" ? "Try a color on the sample room." : "Try a color on this room image."}</h2></div>
             <span className="inline-flex items-center gap-2 self-start rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-slate-600">{mode === "demo" ? "Illustrative wall mask" : previewMask ? "Wall outline ready" : "Original image"}</span>
           </div>
-          {primaryImageUrl ? <div className="mt-4">{mode === "demo" ? <SampleWallTintPreview room={sampleRoom ?? ROOMS.living} color={color} split={split} onSplit={setSplit} /> : <WallTintPreview imageUrl={previewImageUrl} imageAlt={primaryImageAlt} mask={previewMask} color={color} split={split} onSplit={setSplit} />}</div> : <div className="mt-4 grid aspect-video place-items-center rounded-2xl bg-slate-100 text-slate-600"><Info size={22} /><span className="mt-2 text-sm">Room photo unavailable</span></div>}
+          {primaryImageUrl ? <div className="mt-4">{mode === "demo" ? <SampleWallTintPreview room={sampleRoom ?? ROOMS.living} color={color} split={split} onSplit={setSplit} /> : <WallTintPreview imageUrl={previewImageUrl} imageAlt={primaryImageAlt} mask={previewMask} color={color} split={split} onSplit={setSplit} overlayUrl={realisticState.status === "done" ? realisticState.overlayUrl : null} />}</div> : <div className="mt-4 grid aspect-video place-items-center rounded-2xl bg-slate-100 text-slate-600"><Info size={22} /><span className="mt-2 text-sm">Room photo unavailable</span></div>}
+          {realistic.available && <RealisticPreviewControls state={realisticState} onStart={() => void realistic.start()} colorName={color.name} />}
+          {realistic.available && realisticState.status !== "idle" && (
+            <div className="mt-3">
+              <MuseImageCard
+                status={realisticState.status === "working" ? "working" : realisticState.status}
+                timing={{ startedAt: realisticState.startedAt, ...(realisticState.status === "working" ? {} : { endedAt: realisticState.endedAt }) }}
+                colorName={color.name}
+                colorHex={color.hex}
+                viewNumber={previewFrameIndex + 1}
+                message={realisticState.status === "error" ? realisticState.message : undefined}
+              />
+            </div>
+          )}
           {showFramePicker && (
             <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Choose which room view to preview" data-testid="preview-frame-picker">
               {activeRoomFrames.map((frame, index) => (

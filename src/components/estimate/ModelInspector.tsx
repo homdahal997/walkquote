@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { AudioLines, Check, Cpu, Layers, Loader2, ScanSearch, X } from "lucide-react";
+import { AudioLines, Check, Cpu, Layers, Loader2, Paintbrush, ScanSearch, X } from "lucide-react";
 import { roomTypeName } from "@/lib/room-sizes";
 import { SAM_CONCEPTS } from "@/lib/sam-concepts";
 import type { AnalysisStatus, MaskData, ModelTrace, StageTiming } from "@/types/estimate";
@@ -224,6 +224,25 @@ function SamCard({ trace, status, frameUrl }: { trace: ModelTrace; status: Analy
       ) : (
         <Field label="Output">{status === "skipped" || (status === "done" && !hasMask) ? <p className="text-amber-200">No usable surface mask came back. The estimate continues without the color overlay.</p> : status === "error" ? <p className="text-rose-300">Segmentation stopped.</p> : <Waiting status={status} working={`Segmenting ${trace.frameCount} views, up to 3 requests at a time…`} idle="Waiting for the room review" />}</Field>
       )}
+    </ModelCard>
+  );
+}
+
+export function MuseImageCard({ status, timing, colorName, colorHex, viewNumber, message }: { status: AnalysisStatus; timing?: StageTiming; colorName: string; colorHex: string; viewNumber: number; message?: string }) {
+  return (
+    <ModelCard testId="model-card-muse-image" icon={<Paintbrush size={18} />} model="muse-image-1.0" role="Muse Image · realistic wall repaint" status={status} timing={timing}>
+      <Field label="Input">
+        <div className="flex flex-wrap gap-1.5"><Chip>view {viewNumber}</Chip><Chip>SAM 3.1 wall outline</Chip><Chip><span className="mr-1.5 h-2 w-2 rounded-sm" style={{ backgroundColor: colorHex }} />{colorName}</Chip></div>
+      </Field>
+      <Field label="Output">
+        {status === "done" ? (
+          <p data-testid="model-muse-image-output" className="text-emerald-200">Walls repainted in {colorName}; only pixels inside SAM 3.1's wall mask are kept, so trim, ceiling and furniture stay original.</p>
+        ) : status === "error" ? (
+          <p className="text-rose-300">{message ?? "The repaint did not finish."}</p>
+        ) : (
+          <Waiting status={status} working="Repainting walls while keeping lighting, sheen and texture…" idle="Waiting for a tap" />
+        )}
+      </Field>
     </ModelCard>
   );
 }

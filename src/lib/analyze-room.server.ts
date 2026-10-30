@@ -9,16 +9,21 @@ import {
   redactPrivateStrings,
   validateRoomFrames,
   validateWavBase64,
+  validateRenderRequest,
+  buildRenderPrompt,
   type AnalysisSourceId,
   type Stage,
 } from "./analyze-room.shared.server";
 
 // Meta Model API (hackathon models): Muse Spark for room review, SAM 3.1 for surface masks,
-// Muse Voice Transcribe for spoken notes.
+// Muse Voice Transcribe for spoken notes, Muse Image for the realistic wall repaint.
 const META_API = "https://api.meta.ai/v1";
 const OBSERVE_MODEL = "muse-spark-1.3";
 const SEGMENT_MODEL = "sam-3.1";
 const TRANSCRIBE_MODEL = "muse-voice-transcribe-1.0";
+const RENDER_MODEL = "muse-image-1.0";
+const MAX_RENDERS_PER_ATTEMPT = 6;
+const MAX_RENDER_BASE64_CHARS = 8_000_000;
 const VISITOR_DAILY_LIMIT = 3;
 const SITE_DAILY_LIMIT = 25;
 const DAILY_MS = 24 * 60 * 60 * 1000;
@@ -34,6 +39,11 @@ export interface AnalyzeInput {
   audioBase64?: unknown;
   transcript?: unknown;
   frames?: unknown;
+  frame?: unknown;
+  colorHex?: unknown;
+  colorName?: unknown;
+  size?: unknown;
+  renderId?: unknown;
 }
 
 class GatewayError extends Error {
@@ -123,6 +133,36 @@ async function observe(imageUrls: string[], transcript: string, sourceId: Analys
   const text = outputText(await response.json());
   if (!text || text.length > 8000) throw new GatewayError(502, "Room analysis did not finish. Please retry.");
   return parseObservationJson(text, transcript);
+}
+
+/** Muse Image repaints the walls of one room view; the browser trims it to SAM 3.1's wall mask. */
+async function renderWalls(imageUrl: string, colorName: string, colorHex: string, size?: string) {
+  const response = await fetch(`${META_API}/images/edits`, {
+    method: "POST",
+    headers: metaHeaders(),
+    body: JSON.stringify({
+      model: RENDER_MODEL,
+      prompt: buildRenderPrompt(colorName, colorHex),
+      images: [{ image_url: imageUrl }],
+      n: 1,
+      ...(size ? { size } : {}),
+      response_format: "b64_json",
+      output_format: "jpeg",
+    }),
+    signal: withTimeout(58_000),
+  });
+  if (response.status === 401 || response.status === 403) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new GatewayError(response.status, "The realistic preview is not available right now. The color tint preview still works.");
+  }
+  if (!response.ok) await failFromResponse(response);
+  const payload = (await response.json()) as { data?: Array<{ b64_json?: unknown }>; output_format?: unknown };
+  const encoded = payload.data?.[0]?.b64_json;
+  if (typeof encoded !== "string" || encoded.length < 100 || encoded.length > MAX_RENDER_BASE64_CHARS || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    throw new GatewayError(502, "The realistic preview did not finish. Please retry.");
+  }
+  const format = payload.output_format === "png" || payload.output_format === "webp" ? payload.output_format : "jpeg";
+  return { renderImage: `data:image/${format};base64,${encoded}`, renderModel: RENDER_MODEL };
 }
 
 /** Runs one SAM 3.1 concept prompt and returns its raw segmentation line (empty when nothing matched). */
@@ -240,10 +280,16 @@ async function reserveStage(visitorAddress: string, attemptId: string, stage: St
 
   const { data: existing } = await supabaseAdmin
     .from("analysis_usage")
-    .select("attempt_id, visitor_hash")
+    .select("attempt_id, visitor_hash, stage")
     .eq("day", day);
   const rows = existing ?? [];
   const isKnownAttempt = rows.some((row) => row.attempt_id === attemptId);
+  if (stage.startsWith("render-")) {
+    // Previews belong to an analysed room: they never start a new estimate run, and are capped per run.
+    if (!isKnownAttempt) return { error: "Analyze the room before asking for a realistic preview.", errorCode: "RENDER_NEEDS_ANALYSIS" };
+    const renders = rows.filter((row) => row.attempt_id === attemptId && String(row.stage).startsWith("render-")).length;
+    if (renders >= MAX_RENDERS_PER_ATTEMPT) return { error: `This room already has ${MAX_RENDERS_PER_ATTEMPT} realistic previews. The color tint preview still works for other colors.`, errorCode: "RENDER_LIMIT" };
+  }
   if (!isKnownAttempt) {
     const visitorAttempts = new Set(rows.filter((row) => row.visitor_hash === visitorHash).map((row) => row.attempt_id));
     if (visitorAttempts.size >= VISITOR_DAILY_LIMIT) return quotaReply("VISITOR_DAILY_LIMIT");
@@ -283,6 +329,7 @@ const invalid = { error: "Invalid request." };
 export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string, options: { skipQuota?: boolean } = {}): Promise<Json> {
   const stage = body.stage;
   const sourceId = body.sourceId ?? body.sampleId;
+  if (stage === "render") return runRender(body, visitorAddress, options);
   if (stage !== "transcribe" && stage !== "observe" && stage !== "segment") return invalid;
   if (sourceId !== "living" && sourceId !== "bedroom" && sourceId !== "homeowner") return invalid;
   const attemptId = typeof body.attemptId === "string" && UUID.test(body.attemptId) ? body.attemptId.toLowerCase() : null;
@@ -376,6 +423,25 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
     if (!options.skipQuota) await releaseStage(visitorAddress, attemptId, stage);
     const message = error instanceof GatewayError ? error.message : "Room analysis did not finish. Please retry.";
     return { error: message };
+  }
+}
+
+async function runRender(body: AnalyzeInput, visitorAddress: string, options: { skipQuota?: boolean }): Promise<Json> {
+  const attemptId = typeof body.attemptId === "string" && UUID.test(body.attemptId) ? body.attemptId.toLowerCase() : null;
+  if (!attemptId || body.sourceId !== "homeowner" || body.frames !== undefined || body.audioBase64 !== undefined || body.transcript !== undefined) return invalid;
+  const request = validateRenderRequest(body);
+  if (!request) return invalid;
+  const stage: Stage = `render-${request.renderId}`;
+  if (!options.skipQuota) {
+    const quota = await reserveStage(visitorAddress, attemptId, stage);
+    if (quota) return quota;
+  }
+  try {
+    return await renderWalls(request.frame, request.colorName, request.colorHex, request.size);
+  } catch (error) {
+    console.error("analyze-room render failed", { error });
+    if (!options.skipQuota) await releaseStage(visitorAddress, attemptId, stage);
+    return { error: error instanceof GatewayError ? error.message : "The realistic preview did not finish. Please retry." };
   }
 }
 

@@ -1,7 +1,7 @@
 import { analysisDiagnosticFn, analyzeRoomFn } from "@/lib/analyze-room.functions";
 
 export type AnalysisSourceId = "homeowner" | "living" | "bedroom";
-export type AnalysisStage = "transcribe" | "observe" | "segment";
+export type AnalysisStage = "transcribe" | "observe" | "segment" | "render";
 
 export interface AnalyzeRoomRequest {
   operation?: "diagnostic";
@@ -12,6 +12,11 @@ export interface AnalyzeRoomRequest {
   audioBase64?: string;
   transcript?: string;
   frames?: string[];
+  frame?: string;
+  colorHex?: string;
+  colorName?: string;
+  size?: string;
+  renderId?: string;
 }
 
 export async function analyzeRoom(request: AnalyzeRoomRequest): Promise<unknown> {
