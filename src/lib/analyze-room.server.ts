@@ -280,10 +280,16 @@ async function reserveStage(visitorAddress: string, attemptId: string, stage: St
 
   const { data: existing } = await supabaseAdmin
     .from("analysis_usage")
-    .select("attempt_id, visitor_hash")
+    .select("attempt_id, visitor_hash, stage")
     .eq("day", day);
   const rows = existing ?? [];
   const isKnownAttempt = rows.some((row) => row.attempt_id === attemptId);
+  if (stage.startsWith("render-")) {
+    // Previews belong to an analysed room: they never start a new estimate run, and are capped per run.
+    if (!isKnownAttempt) return { error: "Analyze the room before asking for a realistic preview.", errorCode: "RENDER_NEEDS_ANALYSIS" };
+    const renders = rows.filter((row) => row.attempt_id === attemptId && String(row.stage).startsWith("render-")).length;
+    if (renders >= MAX_RENDERS_PER_ATTEMPT) return { error: `This room already has ${MAX_RENDERS_PER_ATTEMPT} realistic previews. The color tint preview still works for other colors.`, errorCode: "RENDER_LIMIT" };
+  }
   if (!isKnownAttempt) {
     const visitorAttempts = new Set(rows.filter((row) => row.visitor_hash === visitorHash).map((row) => row.attempt_id));
     if (visitorAttempts.size >= VISITOR_DAILY_LIMIT) return quotaReply("VISITOR_DAILY_LIMIT");
@@ -323,6 +329,7 @@ const invalid = { error: "Invalid request." };
 export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string, options: { skipQuota?: boolean } = {}): Promise<Json> {
   const stage = body.stage;
   const sourceId = body.sourceId ?? body.sampleId;
+  if (stage === "render") return runRender(body, visitorAddress, options);
   if (stage !== "transcribe" && stage !== "observe" && stage !== "segment") return invalid;
   if (sourceId !== "living" && sourceId !== "bedroom" && sourceId !== "homeowner") return invalid;
   const attemptId = typeof body.attemptId === "string" && UUID.test(body.attemptId) ? body.attemptId.toLowerCase() : null;
@@ -416,6 +423,25 @@ export async function runAnalyzeRoom(body: AnalyzeInput, visitorAddress: string,
     if (!options.skipQuota) await releaseStage(visitorAddress, attemptId, stage);
     const message = error instanceof GatewayError ? error.message : "Room analysis did not finish. Please retry.";
     return { error: message };
+  }
+}
+
+async function runRender(body: AnalyzeInput, visitorAddress: string, options: { skipQuota?: boolean }): Promise<Json> {
+  const attemptId = typeof body.attemptId === "string" && UUID.test(body.attemptId) ? body.attemptId.toLowerCase() : null;
+  if (!attemptId || body.sourceId !== "homeowner" || body.frames !== undefined || body.audioBase64 !== undefined || body.transcript !== undefined) return invalid;
+  const request = validateRenderRequest(body);
+  if (!request) return invalid;
+  const stage: Stage = `render-${request.renderId}`;
+  if (!options.skipQuota) {
+    const quota = await reserveStage(visitorAddress, attemptId, stage);
+    if (quota) return quota;
+  }
+  try {
+    return await renderWalls(request.frame, request.colorName, request.colorHex, request.size);
+  } catch (error) {
+    console.error("analyze-room render failed", { error });
+    if (!options.skipQuota) await releaseStage(visitorAddress, attemptId, stage);
+    return { error: error instanceof GatewayError ? error.message : "The realistic preview did not finish. Please retry." };
   }
 }
 
