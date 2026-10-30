@@ -21,6 +21,7 @@ import {
 import { BeforeAfterSlider } from "@/components/estimate/BeforeAfterSlider";
 import { MuseImageCard } from "@/components/estimate/ModelInspector";
 import { RealisticPreviewControls, useRealisticPreview, type RenderSource } from "@/components/estimate/RealisticPreview";
+import { ConfidenceChip, MaterialsCard, SiteChecksCard, VoiceVisionCard } from "@/components/estimate/EstimatorInsights";
 import { CapturedFrameViewer } from "@/components/estimate/AnalysisProgress";
 import type { SampleRoom } from "@/components/estimate/SampleDemoInspector";
 import {
