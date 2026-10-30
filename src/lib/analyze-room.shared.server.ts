@@ -23,7 +23,7 @@ const ROOM_IMAGES = {
 
 type RoomId = keyof typeof ROOM_IMAGES;
 type AnalysisSourceId = RoomId | "homeowner";
-type Stage = "transcribe" | "observe" | "segment";
+type Stage = "transcribe" | "observe" | "segment" | `render-${string}`;
 
 function redactPrivateStrings(value: string) {
   return value
@@ -81,7 +81,12 @@ function validateRoomFrames(value: unknown): string[] {
   if (!Array.isArray(value) || value.length < MIN_HOMEOWNER_FRAMES || value.length > MAX_HOMEOWNER_FRAMES) {
     throw new Error("frames-invalid");
   }
-  return value.map((item) => {
+  return value.map(validateJpegDataUrl);
+}
+
+/** Validates one compressed JPEG data URL (room view). */
+function validateJpegDataUrl(item: unknown): string {
+  {
     if (typeof item !== "string" || !item.startsWith("data:image/jpeg;base64,")) {
       throw new Error("frame-invalid");
     }
@@ -110,7 +115,36 @@ function validateRoomFrames(value: unknown): string[] {
       throw new Error("frame-invalid");
     }
     return item;
-  });
+  }
+}
+
+const RENDER_COLOR_HEX = /^#[0-9a-f]{6}$/i;
+const RENDER_SIZE = /^(\d{2,5})x(\d{2,5})$/;
+
+/** Validates a Muse Image wall-repaint request; returns null when anything is off. */
+function validateRenderRequest(body: { frame?: unknown; colorHex?: unknown; colorName?: unknown; size?: unknown; renderId?: unknown }) {
+  let frame: string;
+  try {
+    frame = validateJpegDataUrl(body.frame);
+  } catch {
+    return null;
+  }
+  if (typeof body.colorHex !== "string" || !RENDER_COLOR_HEX.test(body.colorHex)) return null;
+  if (typeof body.renderId !== "string" || !/^[0-9a-f]{8}$/.test(body.renderId)) return null;
+  const colorName = typeof body.colorName === "string" ? body.colorName.replace(/[^\w\s'&.-]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) : "";
+  const sizeMatch = typeof body.size === "string" ? body.size.match(RENDER_SIZE) : null;
+  const size = sizeMatch && Number(sizeMatch[1]) > 0 && Number(sizeMatch[2]) > 0 ? body.size as string : undefined;
+  return { frame, colorHex: body.colorHex.toUpperCase(), colorName: colorName || "the selected color", size, renderId: body.renderId };
+}
+
+/** Instruction for Muse Image: repaint walls only, keep everything else and the real lighting. */
+function buildRenderPrompt(colorName: string, colorHex: string) {
+  return [
+    `Repaint ONLY the painted wall surfaces in this exact room photo with ${colorName} (${colorHex}) interior latex paint in an eggshell finish, as if photographed right after a professional two-coat paint job.`,
+    "Keep everything else identical: camera angle, framing, perspective, ceiling, trim, baseboards, crown molding, doors, door and window casings, windows, floor, furniture, decor, outlets, switches, and light fixtures.",
+    "Preserve the room's real lighting: light falloff, shadows, highlights, reflected daylight, and the existing wall texture, so the new color reads naturally under this light.",
+    "Do not add, remove, or move any object. No text, labels, or watermark.",
+  ].join(" ");
 }
 
 
@@ -380,6 +414,9 @@ export {
   redactPrivateStrings,
   validateWavBase64,
   validateRoomFrames,
+  validateJpegDataUrl,
+  validateRenderRequest,
+  buildRenderPrompt,
   parseObservationJson,
   spokenDimensions,
   countSamBoxes,
