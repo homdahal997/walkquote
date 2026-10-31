@@ -8,6 +8,8 @@ export const Route = createFileRoute("/signup")({
       { name: "description", content: "Create a WalkQuote account." },
       { property: "og:title", content: "Create an account — WalkQuote" },
       { property: "og:description", content: "Create a WalkQuote account." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Signup,

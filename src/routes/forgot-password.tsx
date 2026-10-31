@@ -8,6 +8,8 @@ export const Route = createFileRoute("/forgot-password")({
       { name: "description", content: "Request a WalkQuote password reset link." },
       { property: "og:title", content: "Reset your password — WalkQuote" },
       { property: "og:description", content: "Request a WalkQuote password reset link." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: ForgotPassword,

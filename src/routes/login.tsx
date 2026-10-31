@@ -10,6 +10,8 @@ export const Route = createFileRoute("/login")({
       { name: "description", content: "Contractor sign-in for the WalkQuote estimate inbox." },
       { property: "og:title", content: "Sign in — WalkQuote" },
       { property: "og:description", content: "Contractor sign-in for the WalkQuote estimate inbox." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Login,

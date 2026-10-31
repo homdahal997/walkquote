@@ -19,7 +19,7 @@ describe("realistic repaint across four video views", () => {
     mocks.analyze.mockResolvedValue({ renderImage: "data:image/jpeg;base64,edited" });
     mocks.compose.mockImplementation(async (url: string) => `blob:render-${url}`);
     const source = { attemptId: "room-one", frameDataUrls: ["frame-1", "frame-2", "frame-3", "frame-4"] };
-    const mask = { width: 1, height: 1, dataBase64: "gA==" };
+    const mask = { width: 1, height: 1, dataBase64: "gA==", regions: [] };
     vi.stubGlobal("URL", { revokeObjectURL: vi.fn() });
     const { result, rerender, unmount } = renderHook(({ index }) => useRealisticPreview({
       source, frameIndex: index, originalUrl: `view-${index + 1}`, mask: index === 0 ? mask : null,
