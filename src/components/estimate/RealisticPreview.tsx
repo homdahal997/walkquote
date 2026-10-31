@@ -25,7 +25,7 @@ export function useRealisticPreview({ source, frameIndex, originalUrl, mask, col
   mask: MaskData | null;
   color: PaintColor;
 }) {
-  const key = `${frameIndex}:${color.hex.toUpperCase()}`;
+  const key = `${source?.attemptId ?? ""}:${frameIndex}:${color.hex.toUpperCase()}`;
   const [state, setState] = useState<RealisticRenderState>({ status: "idle" });
   const cache = useRef(new Map<string, Extract<RealisticRenderState, { status: "done" }>>());
   const requestRef = useRef(0);
@@ -109,10 +109,10 @@ export function RenderProgressPanel({ startedAt }: { startedAt: number }) {
   );
 }
 
-export function RealisticPreviewControls({ state, onStart, colorName }: { state: RealisticRenderState; onStart: () => void; colorName: string }) {
+export function RealisticPreviewControls({ state, onStart, colorName, hasWallMask = true }: { state: RealisticRenderState; onStart: () => void; colorName: string; hasWallMask?: boolean }) {
   if (state.status === "working") return <RenderProgressPanel startedAt={state.startedAt} />;
   if (state.status === "done") {
-    return <p data-testid="realistic-preview-label" className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-700/30 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-emerald-200"><Sparkles size={13} aria-hidden="true" />Rendered by Muse Image · walls bounded by SAM 3.1</p>;
+    return <p data-testid="realistic-preview-label" className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-700/30 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-emerald-200"><Sparkles size={13} aria-hidden="true" />Rendered by Muse Image{hasWallMask ? " · walls bounded by SAM 3.1" : " · full-image repaint"}</p>;
   }
   return (
     <div className="mt-3">
@@ -121,7 +121,7 @@ export function RealisticPreviewControls({ state, onStart, colorName }: { state:
         {state.status === "error" ? <RotateCcw size={16} aria-hidden="true" /> : <Sparkles size={16} className="text-emerald-300" aria-hidden="true" />}
         {state.status === "error" ? "Retry realistic preview" : `See it realistically in ${colorName}`}
       </button>
-      {state.status === "idle" && <p className="mt-2 text-xs leading-5 text-slate-500">Muse Image repaints the walls in about 25 seconds. SAM 3.1's wall outline keeps the change on wall pixels only.</p>}
+      {state.status === "idle" && <p className="mt-2 text-xs leading-5 text-slate-500">Muse Image repaints the walls in about 25 seconds. {hasWallMask ? "SAM 3.1's wall outline keeps the change on wall pixels only." : "No wall outline is available for this view; the full edited image will be shown and other details may change."}</p>}
     </div>
   );
 }
