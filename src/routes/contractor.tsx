@@ -10,6 +10,8 @@ export const Route = createFileRoute("/contractor")({
       { name: "description", content: "Review homeowner room estimate requests, scopes, budgets, and color choices." },
       { property: "og:title", content: "Estimate inbox — WalkQuote" },
       { property: "og:description", content: "Contractor inbox for WalkQuote room estimate requests." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: ContractorInbox,
