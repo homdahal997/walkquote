@@ -71,6 +71,11 @@ const Login = () => {
         <Link to="/walkthrough" search={{ experience: "demo" }} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-amber-300 px-4 py-3 text-center text-base font-bold leading-5 text-slate-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">Or skip sign-in and explore the Interactive Demo →</Link>
         <p className="mt-2 text-sm leading-5 text-amber-950">The prepared sample opens without an account and stays separate from real room requests.</p>
       </div>
+      <div className="mb-5 rounded-xl border border-teal-200 bg-teal-50 p-4">
+        <p className="text-sm font-bold text-teal-950">Hackathon judges</p>
+        <p className="mt-1 text-sm leading-5 text-teal-900">Use the judge account to open the live contractor inbox.</p>
+        <button type="button" className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-teal-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-teal-800" onClick={() => { setEmail("judges@walkquote.com"); setPassword("Judgeswalkquote@3"); setError(""); }}>Fill judge credentials</button>
+      </div>
       <form className="auth-form" onSubmit={submit}>
         <label className="form-field" htmlFor="login-email"><span>Email address</span><div className="field-control"><input id="login-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@business.com" /></div></label>
         <label className="form-field" htmlFor="login-password"><span>Password</span><div className="field-control"><input id="login-password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" /></div></label>
