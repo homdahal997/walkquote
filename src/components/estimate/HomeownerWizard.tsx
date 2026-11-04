@@ -1964,7 +1964,7 @@ export function HomeownerWizard() {
           <div className="p-5 sm:p-8">
             <DialogHeader className="pr-12">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-300">WalkQuote · three-minute product tour</p>
-              <DialogTitle className="mt-2 text-2xl font-semibold leading-tight text-white sm:text-3xl">{DEMO_VIDEO ? "WalkQuote in three minutes" : "The video is coming soon."}</DialogTitle>
+              <DialogTitle className="mt-2 text-2xl font-semibold leading-tight text-white sm:text-3xl">{DEMO_VIDEO ? "WalkQuote product tour" : "The video is coming soon."}</DialogTitle>
               <DialogDescription className="mt-2 text-base leading-6 text-slate-300">{DEMO_VIDEO ? "See how room details, scope review and a preliminary budget match fit together." : "We have not added a video clip yet. The still image on the landing page is a sample room, not a recording."}</DialogDescription>
             </DialogHeader>
             <div className="mt-6 aspect-video overflow-hidden rounded-2xl border border-slate-700 bg-slate-900">
