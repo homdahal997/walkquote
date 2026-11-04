@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { GOLDEN_COLOR, GOLDEN_REPAINTS, GOLDEN_VIDEO_URL, loadGoldenRun } from "@/lib/golden-run";
+import { canSubmitRoom, GOLDEN_COLOR, GOLDEN_REPAINTS, GOLDEN_VIDEO_URL, loadGoldenRun } from "@/lib/golden-run";
 import { Link, useLocation } from "@tanstack/react-router";
 import { AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowRight, Camera, ShieldCheck, Sparkles, Video } from "lucide-react";
@@ -1305,6 +1305,10 @@ export function HomeownerWizard() {
   };
 
   const continueToContact = () => {
+    if (goldenRun) {
+      toast.info("Saved demo estimates cannot be sent as real requests. Return to live capture to estimate your own room.");
+      return;
+    }
     if (mode !== "homeowner") {
       setScreen("demo-inspector");
       return;
@@ -1320,6 +1324,7 @@ export function HomeownerWizard() {
   };
 
   const backFromEstimate = () => {
+    if (goldenRun) { resetFlow(); return; }
     if (wallAreaEditing && !saveWallAreaEdit()) return;
     setScreen((mode as string) === "demo" ? "demo-inspector" : estimateSource === "doorway_scale" ? "capture" : "measurements");
   };
@@ -1335,7 +1340,7 @@ export function HomeownerWizard() {
 
   const submitLead = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (mode !== "homeowner") {
+    if (!canSubmitRoom(mode, goldenRun)) {
       setFormError("Sample demo quotes stay in the walkthrough and cannot be sent as a contractor request.");
       return;
     }
@@ -1704,7 +1709,7 @@ export function HomeownerWizard() {
       doors: assessment.visibleDoorCount ?? 0,
       windows: assessment.visibleWindowCount ?? 0,
       lines: includedItems.map((item) => ({ label: item.label, detail: item.detail, low: item.low, high: item.high, ...(item.evidenceBadge ? { evidence: `${item.evidenceBadge.model} — ${item.evidenceBadge.detail}${item.confidence === "confirm_on_site" ? ` · Confirm on site: ${item.confidenceNote}` : item.confidence === "grounded" ? " · Grounded" : ""}` } : {}) })),
-      specs: architecturalInventory(assessment.architecturalFeatures, dimensions.ceilingHeightFt).map((entry) => `${entry.label}: ${entry.value}`),
+      specs: [...(goldenRun ? ["Saved real Meta run — Nov 4, 2026; demonstration only, not a live homeowner request. Visual dimensions are approximate."] : []), ...architecturalInventory(assessment.architecturalFeatures, dimensions.ceilingHeightFt).map((entry) => `${entry.label}: ${entry.value}`)],
       siteChecks: siteChecks(assessment, includedItems, reconcileVoiceVision(transcript, assessment, samOpeningCounts)),
       materials: materialsSummary(materialsTakeoff(includedItems, assessment)),
       taxLow: totals.taxLow,

@@ -13,6 +13,9 @@ import type { AnalysisReply, RoomFrame } from "@/types/estimate";
 export const GOLDEN_VIDEO_URL = videoAsset.url;
 export const GOLDEN_REPAINTS = [repaint1.url, repaint2.url, repaint3.url, repaint4.url];
 export const GOLDEN_COLOR = { name: "Warm Linen", hex: "#eadcc4" };
+export function canSubmitRoom(mode: "homeowner" | "demo", savedReplay: boolean) {
+  return mode === "homeowner" && !savedReplay;
+}
 export interface GoldenRun {
   transcribe: AnalysisReply;
   observe: AnalysisReply;

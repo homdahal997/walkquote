@@ -72,10 +72,6 @@ async function failFromResponse(response: Response): Promise<never> {
   throw new GatewayError(response.status, "Room analysis did not finish. Please retry.");
 }
 
-function withTimeout(ms = 55_000) {
-  return AbortSignal.timeout(ms);
-}
-
 function outputText(payload: unknown) {
   const output = (payload as { output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }> })?.output;
   if (!Array.isArray(output)) return "";
