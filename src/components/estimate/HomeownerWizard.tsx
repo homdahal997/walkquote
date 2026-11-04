@@ -1673,6 +1673,7 @@ export function HomeownerWizard() {
       onClearVideoDraft={clearVideoDraft}
       onPhotoFiles={onPhotoFiles}
       onVideoFile={handleVideoFile}
+      onUseSampleVideo={useSampleVideo}
       onRemovePhoto={removePhoto}
       onStartAudioNote={startAudioNote}
       onStopAudioNote={stopAudioNote}

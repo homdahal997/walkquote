@@ -58,6 +58,7 @@ interface RoomCaptureProps {
   onClearVideoDraft: () => void;
   onPhotoFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   onVideoFile: (event: ChangeEvent<HTMLInputElement>) => void;
+  onUseSampleVideo?: () => void | Promise<void>;
   onRemovePhoto: (id: string) => void;
   onStartAudioNote: () => void | Promise<void>;
   onStopAudioNote: () => void;
@@ -103,6 +104,7 @@ export function RoomCapture({
   onClearVideoDraft,
   onPhotoFiles,
   onVideoFile,
+  onUseSampleVideo,
   onRemovePhoto,
   onStartAudioNote,
   onStopAudioNote,
@@ -170,6 +172,9 @@ export function RoomCapture({
                       aria-label="Upload a recorded room walkthrough video"
                     />
                   </label>
+                )}
+                {!recording && !cameraStream && !videoAsset && onUseSampleVideo && (
+                  <button type="button" data-testid="use-sample-video-btn" onClick={() => void onUseSampleVideo()} disabled={preparingVideo} className="inline-flex min-h-14 flex-1 items-center justify-center gap-2 rounded-xl border border-teal-700 bg-teal-50 px-4 py-3 text-base font-semibold text-teal-900 transition hover:bg-teal-100 disabled:cursor-wait disabled:opacity-60">{preparingVideo ? <><Loader2 size={17} className="animate-spin" /> Preparing sample</> : <><Video size={18} /> Use sample video for quick test</>}</button>
                 )}
                 {recording && (
                   <button type="button" onClick={onStopVideoCapture} className="inline-flex min-h-14 w-full flex-1 items-center justify-center gap-2 rounded-xl bg-rose-700 px-4 py-3 text-base font-bold text-white transition hover:bg-rose-800"><span className="h-3 w-3 rounded-sm bg-white" /> Stop and preview</button>
