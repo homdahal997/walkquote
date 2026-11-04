@@ -657,10 +657,29 @@ export function HomeownerWizard() {
     await beginVideoCapture();
   };
 
+  const useSampleVideo = async () => {
+    setCaptureError("");
+    setPreparingVideo(true);
+    try {
+      const response = await fetch(GOLDEN_VIDEO_URL);
+      if (!response.ok) throw new Error("fetch");
+      const blob = await response.blob();
+      const file = new File([blob], "family-room-walkthrough.mp4", { type: "video/mp4" });
+      await processVideoFile(file);
+    } catch {
+      setPreparingVideo(false);
+      setCaptureError("The sample video could not be loaded. Please try again.");
+    }
+  };
+
   const handleVideoFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    await processVideoFile(file);
+  };
+
+  const processVideoFile = async (file: File) => {
 
     if (file.size > MAX_UPLOADED_VIDEO_BYTES) {
       setCaptureError("Video file is too large (maximum 120MB). Please trim it or record a shorter walkthrough.");
