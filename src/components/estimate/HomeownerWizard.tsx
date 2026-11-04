@@ -1910,7 +1910,7 @@ export function HomeownerWizard() {
     <div className={`wq-app min-h-screen ${compactMobileStep ? "max-sm:!bg-slate-50 max-sm:!bg-none" : ""}`}>
       <HeroHeader brandMark={BRAND_MARK} demo={(mode as string) === "demo"} compact={compactMobileStep} landing={screen === "setup"} />
       <main className={`wq-main pt-5 sm:pt-8 ${compactMobileStep || screen === "setup" ? "max-sm:pt-3" : ""} ${mode === "homeowner" && screen === "estimate" ? "wq-estimate-bar-clearance" : ""}`}>
-        {screen === "setup" && mode === "homeowner" ? null : <ExperienceModeSwitch mode={mode} disabled={modeSwitchDisabled || goldenLoading} onSelect={(nextMode) => { if (nextMode !== mode || goldenRun) resetFlow(nextMode); }} />}
+        {goldenRun || (screen === "setup" && mode === "homeowner") ? null : <ExperienceModeSwitch mode={mode} disabled={modeSwitchDisabled || goldenLoading} onSelect={(nextMode) => { if (nextMode !== mode) resetFlow(nextMode); }} />}
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Button variant="outline" disabled={modeSwitchDisabled || goldenLoading} onClick={() => void openGoldenRun()} className="h-auto min-h-11 whitespace-normal text-left"><Sparkles aria-hidden="true" />{goldenLoading ? "Loading saved Meta run…" : "Open golden-run demo"}</Button>
           {goldenError && <p role="alert" className="text-sm text-destructive">{goldenError}</p>}
@@ -1929,7 +1929,7 @@ export function HomeownerWizard() {
         </AnimatePresence>
         <div className={compactMobileStep ? "max-sm:hidden" : ""}><PageFooter /></div>
       </main>
-      <EstimateMobileSummary
+      {!goldenRun && <EstimateMobileSummary
         mode={mode}
         screen={screen}
         dimensions={dimensions}
@@ -1937,7 +1937,7 @@ export function HomeownerWizard() {
         totals={totals}
         budgetStatus={budgetStatus}
         onContinueToContact={continueToContact}
-      />
+      />}
       <Dialog open={demoVideoOpen} onOpenChange={setDemoVideoOpen}>
         <DialogContent className="w-[calc(100%-1rem)] max-h-[calc(100dvh-1rem)] max-w-4xl overflow-y-auto rounded-[1.5rem] border-slate-700 bg-slate-950 p-0 text-white sm:w-[calc(100%-2rem)] sm:rounded-3xl [&>button]:right-3 [&>button]:top-3 [&>button]:grid [&>button]:min-h-11 [&>button]:min-w-11 [&>button]:place-items-center [&>button]:rounded-xl [&>button]:bg-white/10 [&>button]:text-white [&>button]:opacity-100 [&>button]:hover:bg-white/20">
           <div className="p-5 sm:p-8">

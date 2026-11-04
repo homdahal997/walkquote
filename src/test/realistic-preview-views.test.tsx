@@ -15,6 +15,25 @@ vi.mock("@/lib/realistic-preview", () => ({
 afterEach(() => vi.clearAllMocks());
 
 describe("realistic repaint across four video views", () => {
+  it("replays four saved repaints without Meta calls and blocks unsaved colors", async () => {
+    mocks.compose.mockImplementation(async (url: string) => `blob:saved-${url}`);
+    vi.stubGlobal("URL", { revokeObjectURL: vi.fn() });
+    const source = { attemptId: "golden", frameDataUrls: ["a", "b", "c", "d"], cachedRenders: { colorHex: "#EADCC4", imageUrls: ["saved-a", "saved-b", "saved-c", "saved-d"] } };
+    const { result, rerender, unmount } = renderHook(({ index, hex }) => useRealisticPreview({ source, frameIndex: index, originalUrl: source.frameDataUrls[index], mask: null, color: { name: "Warm Linen", hex } }), { initialProps: { index: 0, hex: "#EADCC4" } });
+    for (let index = 0; index < 4; index++) {
+      rerender({ index, hex: "#EADCC4" });
+      await act(async () => { await result.current.start(); });
+      expect(result.current.state.status).toBe("done");
+      expect(mocks.compose).toHaveBeenLastCalledWith(source.frameDataUrls[index], source.cachedRenders.imageUrls[index], null);
+    }
+    expect(mocks.analyze).not.toHaveBeenCalled();
+    rerender({ index: 0, hex: "#B7CDD0" });
+    expect(result.current.available).toBe(false);
+    await act(async () => { await result.current.start(); });
+    expect(mocks.analyze).not.toHaveBeenCalled();
+    unmount();
+    vi.unstubAllGlobals();
+  });
   it("sends each selected frame without borrowing a different view's mask and reuses cached renders", async () => {
     mocks.analyze.mockResolvedValue({ renderImage: "data:image/jpeg;base64,edited" });
     mocks.compose.mockImplementation(async (url: string) => `blob:render-${url}`);
