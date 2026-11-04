@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { GOLDEN_COLOR, GOLDEN_REPAINTS, GOLDEN_VIDEO_URL, loadGoldenRun } from "@/lib/golden-run";
 import { Link, useLocation } from "@tanstack/react-router";
 import { AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowRight, Camera, ShieldCheck, Sparkles, Video } from "lucide-react";
@@ -250,6 +252,9 @@ export function HomeownerWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [colorHexError, setColorHexError] = useState("");
   const [demoVideoOpen, setDemoVideoOpen] = useState(false);
+  const [goldenRun, setGoldenRun] = useState(false);
+  const [goldenLoading, setGoldenLoading] = useState(false);
+  const [goldenError, setGoldenError] = useState("");
 
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -818,6 +823,7 @@ export function HomeownerWizard() {
   };
 
   const startAnalysis = async (retry = false) => {
+    if (goldenRun) return;
     if (mode !== "homeowner") return;
     if (mode === "homeowner") {
       if (!analysisConsent) {
@@ -1084,6 +1090,8 @@ export function HomeownerWizard() {
   };
 
   const resetFlow = (nextMode: "homeowner" | "demo" = "homeowner") => {
+    setGoldenRun(false);
+    setGoldenError("");
     if (videoStopTimeoutRef.current !== null) window.clearTimeout(videoStopTimeoutRef.current);
     if (audioStopTimeoutRef.current !== null) window.clearTimeout(audioStopTimeoutRef.current);
     videoStopTimeoutRef.current = null;
@@ -1514,6 +1522,48 @@ export function HomeownerWizard() {
     }
   };
 
+  const openGoldenRun = async () => {
+    if (modeSwitchDisabled || goldenLoading) return;
+    setGoldenLoading(true);
+    setGoldenError("");
+    try {
+      const { results, frames } = await loadGoldenRun();
+      const observation = results.observe;
+      const suggested = observation.suggestedDimensions;
+      if (!suggested) throw new Error("The saved room dimensions could not be loaded.");
+      const segmentation = results.segment;
+      const decoded = await Promise.all((segmentation.frameMaskTexts ?? []).map((text) => decodeOptionalMask(text).catch(() => null)));
+      const [wall, trim, openings] = await Promise.all([decodeOptionalMask(segmentation.maskText), decodeOptionalMask(segmentation.trimMaskText), decodeOptionalMask(segmentation.openingMaskText)]);
+      resetFlow("homeowner");
+      setGoldenRun(true);
+      setCaptureMode("video");
+      setVideoFrames(frames);
+      setTranscript(results.transcribe.transcript ?? "");
+      setObservations(observation.observations ?? []);
+      setAssessment({ ...observation, visibleDoorCount: observation.visibleDoorCount ?? null, visibleWindowCount: observation.visibleWindowCount ?? null, visibleMarkCount: observation.visibleMarkCount ?? null, wallTone: observation.wallTone ?? "unknown", scaleReference: observation.scaleReference ?? "none", suggestedDimensions: suggested, openingDeductionSqFt: observation.openingDeductionSqFt ?? null });
+      setMask(wall);
+      setTrimMask(trim);
+      setOpeningMask(openings);
+      setFrameWallMasks(decoded);
+      setMaskUnavailable(!decoded.some(Boolean));
+      setSamOpeningCounts({ doors: segmentation.samDoorCounts ?? [], windows: segmentation.samWindowCounts ?? [] });
+      setAnalysisStatuses(["done", "done", "done", "done"]);
+      setStageTimings([]);
+      setVoiceFailed(false);
+      setRenderSource({ attemptId: "golden-family-room", frameDataUrls: frames.map((frame) => frame.previewUrl), cachedRenders: { colorHex: GOLDEN_COLOR.hex, imageUrls: GOLDEN_REPAINTS } });
+      setColor(GOLDEN_COLOR);
+      setColorHexDraft(GOLDEN_COLOR.hex.toUpperCase());
+      setEstimateSource("doorway_scale");
+      setMeasurementFields({ lengthFt: String(suggested.lengthFt), widthFt: String(suggested.widthFt), ceilingHeightFt: String(suggested.ceilingHeightFt), perimeterFt: "", ceilingAreaSqFt: "", doorSides: "", patchCount: "" });
+      setMeasurementConfirmed(true);
+      setScreen("estimate");
+    } catch (error) {
+      setGoldenError(error instanceof Error ? error.message : "The saved demo could not be loaded.");
+    } finally {
+      setGoldenLoading(false);
+    }
+  };
+
   const renderSetup = () => (
     <BudgetSetup key="setup"
       motionProps={pageMotion(reduceMotion)}
@@ -1855,7 +1905,12 @@ export function HomeownerWizard() {
     <div className={`wq-app min-h-screen ${compactMobileStep ? "max-sm:!bg-slate-50 max-sm:!bg-none" : ""}`}>
       <HeroHeader brandMark={BRAND_MARK} demo={(mode as string) === "demo"} compact={compactMobileStep} landing={screen === "setup"} />
       <main className={`wq-main pt-5 sm:pt-8 ${compactMobileStep || screen === "setup" ? "max-sm:pt-3" : ""} ${mode === "homeowner" && screen === "estimate" ? "wq-estimate-bar-clearance" : ""}`}>
-        {screen === "setup" && mode === "homeowner" ? null : <ExperienceModeSwitch mode={mode} disabled={modeSwitchDisabled} onSelect={(nextMode) => { if (nextMode !== mode) resetFlow(nextMode); }} />}
+        {screen === "setup" && mode === "homeowner" ? null : <ExperienceModeSwitch mode={mode} disabled={modeSwitchDisabled || goldenLoading} onSelect={(nextMode) => { if (nextMode !== mode || goldenRun) resetFlow(nextMode); }} />}
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <Button variant="outline" disabled={modeSwitchDisabled || goldenLoading} onClick={() => void openGoldenRun()} className="h-auto min-h-11 whitespace-normal text-left"><Sparkles aria-hidden="true" />{goldenLoading ? "Loading saved Meta run…" : "Open golden-run demo"}</Button>
+          {goldenError && <p role="alert" className="text-sm text-destructive">{goldenError}</p>}
+          {goldenRun && <><p role="status" className="text-sm text-muted-foreground">Saved real Meta run · Nov 4, 2026 · no live calls. Warm Linen repaints saved for all four views. Visual dimensions are approximate.</p><Button variant="ghost" onClick={() => resetFlow()}><Camera aria-hidden="true" />Return to live capture</Button><details className="w-full"><summary className="cursor-pointer text-sm text-primary">Original sample video</summary><video src={GOLDEN_VIDEO_URL} controls playsInline preload="metadata" className="mt-2 aspect-video w-full max-w-xl rounded-lg" aria-label="Golden-run source video" /></details></>}
+        </div>
         <JourneyProgress active={activeJourneyStep} demo={(mode as string) === "demo"} />
         <AnimatePresence mode="wait">
           {screen === "setup" && renderSetup()}
