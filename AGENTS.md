@@ -12,6 +12,7 @@
 ## Project rules (WalkQuote, migrated from a Buildy/Superdev app)
 - `src/entities/index.ts` keeps the old entity-manager API (create/get/query) on top of Lovable Cloud tables so the imported estimate components stay unchanged; anonymous inserts generate ids client-side and never request a returning row because RLS hides rows from visitors.
 - Live AI analysis is open to guests with per-visitor and site-wide daily limits enforced server-side in `reserveStage`; the administrator (has_role admin) skips limits. The server check stays admin-only.
+- Daily quota values live in `src/lib/analysis-limits.ts`, shared by enforcement and UI messages so displayed limits stay consistent.
 - tsconfig runs with `strict: false` + `strictNullChecks: true` because the imported code was written for a non-strict config; TanStack Router requires strictNullChecks.
 - Contractor demo mode (`/contractor?view=demo`) renders static sample leads from `src/lib/sample-leads.ts` and never queries the database.
 
