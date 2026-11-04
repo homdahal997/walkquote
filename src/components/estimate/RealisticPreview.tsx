@@ -7,6 +7,7 @@ import type { AnalysisReply, MaskData, PaintColor } from "@/types/estimate";
 export interface RenderSource {
   attemptId: string;
   frameDataUrls: string[];
+  cachedRenders?: { colorHex: string; imageUrls: string[] };
 }
 
 export type RealisticRenderState =
@@ -30,7 +31,7 @@ export function useRealisticPreview({ source, frameIndex, originalUrl, mask, col
   const cache = useRef(new Map<string, Extract<RealisticRenderState, { status: "done" }>>());
   const requestRef = useRef(0);
   const frame = source?.frameDataUrls[frameIndex];
-  const available = Boolean(source && frame && originalUrl);
+  const available = Boolean(source && frame && originalUrl && (!source.cachedRenders || source.cachedRenders.colorHex.toUpperCase() === color.hex.toUpperCase()));
 
   // A new color or view cancels any running request and shows the button (or a cached render).
   useEffect(() => {
@@ -50,8 +51,10 @@ export function useRealisticPreview({ source, frameIndex, originalUrl, mask, col
     setState({ status: "working", startedAt });
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      const cachedImage = source.cachedRenders?.imageUrls[frameIndex];
+      if (source.cachedRenders && (!cachedImage || source.cachedRenders.colorHex.toUpperCase() !== color.hex.toUpperCase())) return;
       const { width, height } = await imageSize(originalUrl);
-      const request = analyzeRoom({
+      const request = cachedImage ? Promise.resolve({ renderImage: cachedImage } as AnalysisReply) : analyzeRoom({
         stage: "render",
         sourceId: "homeowner",
         attemptId: source.attemptId,
