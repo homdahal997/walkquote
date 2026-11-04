@@ -1,5 +1,6 @@
 import { decodeMaskToRaster, parseImageStream, recordsOfKind } from "@meta-sam/parser";
 import type { ResponsesEvent } from "@meta-sam/parser";
+import productTourVideo from "@/assets/walkquote-product-tour.mp4.asset.json";
 import type {
   DemoVideoSource,
   EstimateLead,
@@ -142,7 +143,8 @@ export function resolveDemoVideoSource(rawSource: string): DemoVideoSource | nul
   return null;
 }
 
-export const DEMO_VIDEO = resolveDemoVideoSource(DEMO_VIDEO_SOURCE);
+export const DEMO_VIDEO: DemoVideoSource | null =
+  resolveDemoVideoSource(DEMO_VIDEO_SOURCE) ?? { kind: "video", src: productTourVideo.url };
 export const DEMO_SCOPE_SELECTIONS: Record<RoomId, ScopeSelections> = {
   living: { ceiling: false, trim: false, doors: false, patch: true },
   bedroom: { ceiling: false, trim: true, doors: false, patch: false },

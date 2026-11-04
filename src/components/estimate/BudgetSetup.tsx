@@ -73,11 +73,11 @@ export function BudgetSetup({
         </div>
         <aside className="flex flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
-            <img src={videoCardImage} alt="Static illustrative living-room sample image used in the video placeholder, not a recording" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+            <img src={videoCardImage} alt="Living room preview for the WalkQuote product tour video" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/90 via-slate-950/40 to-slate-950/10" />
             <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
-              <span className="rounded-full bg-slate-950/85 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-white">Sample still · not video</span>
-              <span className="rounded-full bg-amber-300 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-slate-950">Coming soon</span>
+              <span className="rounded-full bg-slate-950/85 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-white">Product tour</span>
+              <span className="rounded-full bg-teal-300 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-slate-950">3:30 video</span>
             </div>
             <div className="absolute bottom-4 left-4 right-4 text-white sm:bottom-5 sm:left-5">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">Room · scope · budget</p>
@@ -87,7 +87,7 @@ export function BudgetSetup({
           <div className="mt-5 flex-1">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">WalkQuote video walkthrough</p>
             <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">See how the first-pass range comes together.</h2>
-            <p className="mt-2 text-base leading-6 text-slate-600">The video has not been added yet. The interactive sample is ready now, with no sign-in.</p>
+            <p className="mt-2 text-base leading-6 text-slate-600">Watch all four Meta models turn a room walkthrough into a priced estimate, or try the interactive sample now with no sign-in.</p>
           </div>
           <button type="button" aria-haspopup="dialog" onClick={onOpenDemoVideo} className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-bold text-slate-900 transition hover:border-slate-500 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"><Video size={18} aria-hidden="true" /> Watch 3-Minute Demo <ArrowRight size={17} aria-hidden="true" /></button>
         </aside>
