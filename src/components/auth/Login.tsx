@@ -52,8 +52,8 @@ const Login = () => {
     setError("");
     setBusy(true);
     try {
-      await signIn(email.trim(), password);
-      window.location.assign(afterLoginPath());
+      const user = await signIn(email.trim(), password);
+      window.location.assign(await afterLoginPath(user));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sign-in failed. Please try again.");
     } finally {

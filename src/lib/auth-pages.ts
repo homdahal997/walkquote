@@ -30,10 +30,20 @@ export async function resetPassword(password: string) {
   return { success: true };
 }
 
-/** Where to go after login: a same-origin `?from_url=` path, else "/". */
-export function afterLoginPath(): string {
+/** Where to go after login: a same-origin `?from_url=` path, admins to the inbox, else "/". */
+export async function afterLoginPath(user: { id: string } | null): Promise<string> {
   const raw = new URLSearchParams(window.location.search).get("from_url");
-  if (!raw) return "/";
+  if (!raw) {
+    if (user) {
+      try {
+        const { data } = await supabase.rpc("has_role", { _user_id: user.id, _role: "admin" });
+        if (data === true) return "/contractor";
+      } catch {
+        // Fall through to the default path.
+      }
+    }
+    return "/";
+  }
   try {
     const url = new URL(raw, window.location.origin);
     return url.origin === window.location.origin ? url.pathname + url.search + url.hash : "/";
