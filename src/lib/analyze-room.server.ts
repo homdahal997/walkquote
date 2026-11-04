@@ -1,3 +1,4 @@
+import { fetchMetaWithRetry } from "./meta-retry";
 import {
   MAX_MASK_TEXT_CHARS,
   MAX_SEGMENTATION_BUNDLE_CHARS,
@@ -94,12 +95,13 @@ async function transcribe(bytes: Uint8Array) {
     "request.json",
   );
   form.set("audio", new Blob([bytes as unknown as BlobPart], { type: "audio/wav" }), "room-note.wav");
-  const response = await fetch(`${META_API}/asr/transcribe?sessionId=${crypto.randomUUID()}`, {
+  const sessionId = crypto.randomUUID();
+  const response = await fetchMetaWithRetry((signal) => fetch(`${META_API}/asr/transcribe?sessionId=${sessionId}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey()}`, Accept: "application/json" },
     body: form,
-    signal: withTimeout(),
-  });
+    signal,
+  }));
   if (!response.ok) await failFromResponse(response);
   const result = (await response.json()) as { transcript?: unknown };
   if (typeof result.transcript !== "string") throw new GatewayError(502, "Room analysis did not finish. Please retry.");
@@ -108,7 +110,7 @@ async function transcribe(bytes: Uint8Array) {
 
 async function observe(imageUrls: string[], transcript: string, sourceId: AnalysisSourceId) {
   const prompt = buildObservePrompt(transcript, sourceId);
-  const response = await fetch(`${META_API}/responses`, {
+  const response = await fetchMetaWithRetry((signal) => fetch(`${META_API}/responses`, {
     method: "POST",
     headers: metaHeaders(),
     body: JSON.stringify({
@@ -128,8 +130,8 @@ async function observe(imageUrls: string[], transcript: string, sourceId: Analys
         },
       ],
     }),
-    signal: withTimeout(),
-  });
+    signal,
+  }));
   if (!response.ok) await failFromResponse(response);
   const text = outputText(await response.json());
   if (!text || text.length > 8000) throw new GatewayError(502, "Room analysis did not finish. Please retry.");
@@ -138,7 +140,7 @@ async function observe(imageUrls: string[], transcript: string, sourceId: Analys
 
 /** Muse Image repaints the walls of one room view; the browser trims it to SAM 3.1's wall mask. */
 async function renderWalls(imageUrl: string, colorName: string, colorHex: string, size?: string) {
-  const response = await fetch(`${META_API}/images/edits`, {
+  const response = await fetchMetaWithRetry((signal) => fetch(`${META_API}/images/edits`, {
     method: "POST",
     headers: metaHeaders(),
     body: JSON.stringify({
@@ -150,8 +152,8 @@ async function renderWalls(imageUrl: string, colorName: string, colorHex: string
       response_format: "b64_json",
       output_format: "jpeg",
     }),
-    signal: withTimeout(58_000),
-  });
+    signal,
+  }), { timeoutMs: 58_000 });
   if (response.status === 401 || response.status === 403) {
     await response.body?.cancel().catch(() => undefined);
     throw new GatewayError(response.status, "The realistic preview is not available right now. The color tint preview still works.");
@@ -168,7 +170,7 @@ async function renderWalls(imageUrl: string, colorName: string, colorHex: string
 
 /** Runs one SAM 3.1 concept prompt and returns its raw segmentation line (empty when nothing matched). */
 async function samConcept(imageUrl: string, concept: string) {
-  const request = () => fetch(`${META_API}/responses`, {
+  const response = await fetchMetaWithRetry((signal) => fetch(`${META_API}/responses`, {
     method: "POST",
     headers: metaHeaders(),
     body: JSON.stringify({
@@ -178,15 +180,8 @@ async function samConcept(imageUrl: string, concept: string) {
         { type: "message", role: "user", content: [{ type: "input_text", text: concept }, { type: "input_image", image_url: imageUrl }] },
       ],
     }),
-    signal: withTimeout(),
-  });
-  let response = await request();
-  // One retry after a short pause on burst rate limits or transient server errors.
-  if (response.status === 429 || response.status >= 500) {
-    await response.body?.cancel().catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    response = await request();
-  }
+    signal,
+  }));
   if (!response.ok) await failFromResponse(response);
   return outputText(await response.json()).trim();
 }
@@ -200,6 +195,7 @@ async function samWalls(imageUrl: string) {
       const line = await samConcept(imageUrl, concept);
       if (tryMerge([line])) return line;
     } catch (error) {
+      if (error instanceof GatewayError && error.status < 500) throw error;
       lastError = error;
     }
   }
