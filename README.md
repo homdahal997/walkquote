@@ -1,6 +1,6 @@
 # WalkQuote
 
-**Walk the room. Get the quote.** A 20-second phone walkthrough becomes an itemized interior painting estimate, a realistic color preview, and a qualified lead for the painter. It runs on four Meta models.
+**Walk the room. Get the quote.** A 30-second phone walkthrough becomes an itemized interior painting estimate, a realistic color preview, and a qualified lead for the painter. It runs on four Meta models.
 
 **Live app:** https://walkquote.lovable.app
 **Built for:** Meta Global AI Developer Hackathon, Indie Developer Track
@@ -11,7 +11,7 @@
 
 ## The problem
 
-Painting contractors spend 5 to 10 unpaid hours a week driving to homes just to measure rooms and write quotes. Many of those quotes go to homeowners whose budget never matched the job. Homeowners can't picture a new color until the walls are already painted.
+Painting contractors spend 10 to 15 unpaid hours a week driving to homes just to measure rooms and write quotes. Many of those quotes go to homeowners whose budget never matched the job. Homeowners can't picture a new color until the walls are already painted.
 
 ## What WalkQuote does
 
