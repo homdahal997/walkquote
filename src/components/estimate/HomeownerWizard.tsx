@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { toast } from "sonner";
+import { VISITOR_DAILY_LIMIT, SITE_DAILY_LIMIT } from "@/lib/analysis-limits";
 import { Button } from "@/components/ui/button";
 import { canSubmitRoom, GOLDEN_COLOR, GOLDEN_REPAINTS, GOLDEN_VIDEO_URL, loadGoldenRun } from "@/lib/golden-run";
 import { Link, useLocation } from "@tanstack/react-router";
@@ -1075,9 +1076,9 @@ export function HomeownerWizard() {
       setAnalysisErrorCode(stageError?.code ?? null);
       const limitTime = formatLimitResetTime(stageError?.resetsAt);
       const serviceMessage = stageError?.code === "VISITOR_DAILY_LIMIT"
-        ? `This connection has reached its daily limit of three estimate runs. Try again after ${limitTime}.`
+        ? `This connection has reached its daily limit of ${VISITOR_DAILY_LIMIT} estimate runs. Try again after ${limitTime}.`
         : stageError?.code === "SITE_DAILY_LIMIT"
-          ? `WalkQuote has reached its daily pilot limit of 25 estimate runs. Try again after ${limitTime}.`
+          ? `WalkQuote has reached its daily pilot limit of ${SITE_DAILY_LIMIT} estimate runs. Try again after ${limitTime}.`
           : stageError?.code === "USAGE_IDENTITY_UNAVAILABLE"
             ? "We could not safely verify this connection's daily estimate limit, so analysis did not start. Try again later."
             : stageError?.code === "USAGE_LIMIT_UNAVAILABLE"

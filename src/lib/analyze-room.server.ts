@@ -1,4 +1,5 @@
 import { fetchMetaWithRetry } from "./meta-retry";
+import { VISITOR_DAILY_LIMIT, SITE_DAILY_LIMIT } from "./analysis-limits";
 import {
   MAX_MASK_TEXT_CHARS,
   MAX_SEGMENTATION_BUNDLE_CHARS,
@@ -26,8 +27,6 @@ const RENDER_MODEL = "muse-image-1.0";
 const MAX_RENDERS_PER_ATTEMPT = 6;
 const RESEND_WINDOW_MS = 2 * 60 * 1000;
 const MAX_RENDER_BASE64_CHARS = 8_000_000;
-const VISITOR_DAILY_LIMIT = 3;
-const SITE_DAILY_LIMIT = 25;
 const DAILY_MS = 24 * 60 * 60 * 1000;
 
 type Json = Record<string, unknown>;
