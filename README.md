@@ -75,6 +75,41 @@ Phone video + voice
                  contractor inbox (leads)
 ```
 
+## System architecture
+
+WalkQuote is a full-stack TanStack Start app deployed to the edge. The browser never touches a Meta endpoint directly, and no AI key ever reaches client code.
+
+```text
+┌────────────────────────── Browser ───────────────────────────┐
+│  Capture UI (camera / upload / sample video)                 │
+│  Frame extraction · WAV decoding · SAM mask decoding         │
+│  (@meta-sam/parser) · line-item editor · color preview       │
+└──────────────┬───────────────────────────────────────────────┘
+               │  server function calls (auth token attached)
+┌──────────────▼──────────── Edge runtime (Cloudflare Workers) ─┐
+│  analyze-room.server.ts  — the Meta orchestration layer       │
+│    • stage reservation + guest quotas (per-visitor/site/day)  │
+│    • one bounded retry for 429/5xx, honors Retry-After        │
+│    • META_MODEL_API_KEY stays server-side, never serialized   │
+└───────┬─────────────────────────────┬─────────────────────────┘
+        │ https://api.meta.ai/v1      │
+┌───────▼──────────┐        ┌─────────▼──────────────────────────┐
+│  Meta Model API  │        │  Lovable Cloud (Postgres)          │
+│  muse-voice-     │        │  attempts, stages, quotes, leads   │
+│  transcribe 1.0  │        │  row-level security per session    │
+│  muse-spark 1.3  │        │  roles in a protected user_roles   │
+│  sam-3.1         │        │  table (never user-editable meta)  │
+│  muse-image 1.0  │        │  golden-run assets on CDN          │
+└──────────────────┘        └────────────────────────────────────┘
+```
+
+Key architectural decisions:
+
+1. **Server-only AI boundary:** all four Meta models are called from the server orchestration layer. `META_MODEL_API_KEY` lives in a server-side secret store and is never bundled, logged, or returned to the browser.
+2. **Browser-side pixel work:** video frame extraction, WAV audio decoding, and SAM mask decoding run in the browser, so large media never round-trips through the server and the mask composite happens instantly on the client.
+3. **Spend protection:** each stage is reserved atomically before a Meta call, guest limits are enforced server-side (the admin role bypasses them), retries are bounded to one delayed attempt for 429/5xx within the original timeout, and ambiguous network failures are never replayed. Cached renders are keyed by attempt, view, and color to avoid repeat `muse-image-1.0` calls.
+4. **Data privacy & multi-tenancy:** row-level security keeps quotes visible only to their session's homeowner, while contractors read leads through a verified role table. Golden-run replays load saved authentic Meta outputs from CDN assets with zero API calls and can never be submitted as real leads.
+
 ## Project structure
 
 ```text
